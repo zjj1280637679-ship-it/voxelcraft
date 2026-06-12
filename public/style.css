@@ -1,6 +1,8 @@
 /* VoxelCraft (《永远的山根乡》) — shell & HUD styles. No external assets/fonts.
-   Menu theme: warm sunset voxel-fantasy — dark walnut panels, gold-copper trim,
-   wood-sign banners, beveled pixel buttons. HUD/touch layout rules unchanged. */
+   Menu theme: warm sunset voxel-fantasy, FLOATING edition — the big walnut card
+   is gone; every element floats over the 3D sunset terrain with its own small
+   backing plate (wood signs, beveled buttons, narrow translucent strips).
+   HUD/touch layout rules unchanged. */
 
 :root {
   --bg: #1a120b;
@@ -8,8 +10,8 @@
   --panel-edge-out: #15100a;              /* outermost 1px ring */
   --copper: #c9a227;                      /* main 2px trim */
   --panel-glint: rgba(255, 230, 160, 0.25); /* inner 1px highlight */
-  --field: rgba(26, 16, 9, 0.78);
-  --field-border: #7a5a26;
+  --field: rgba(26, 17, 10, 0.7);          /* shared floating backing strip */
+  --field-border: rgba(201, 162, 39, 0.55); /* dimmed copper edge for strips */
   --text: #f3e7c9;
   --muted: #c9b386;
   --accent: #5dbb46;
@@ -92,8 +94,9 @@ body {
       rgba(12, 6, 2, 0.42) 100%);
 }
 
-/* Centered card panel: outer 1px dark ring + 2px gold-copper trim +
-   inner 1px warm glint. */
+/* Invisible layout shell: the old walnut card panel is gone — pages float
+   directly over the sunset terrain. Keeps only the width/centering/padding
+   skeleton and the scroll behavior. */
 .menu-shell {
   position: relative;
   z-index: 2;
@@ -101,14 +104,9 @@ body {
   max-height: 100%;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  background: var(--panel);
-  border: 2px solid var(--copper);
-  border-radius: 8px;
+  background: none;
+  border: 0;
   padding: 24px 22px 16px;
-  box-shadow:
-    0 0 0 1px var(--panel-edge-out),
-    0 18px 50px rgba(0, 0, 0, 0.55),
-    inset 0 0 0 1px var(--panel-glint);
 }
 
 /* Big entry title: gold gradient fill with chunky 3D drop edge.
@@ -122,9 +120,12 @@ body {
   font-weight: 900;
   letter-spacing: 2px;
   color: var(--gold);
+  /* Stroke bumped one notch (extra stacked 1px ring + darker blur) so the
+     title stays crisp floating straight on the bright sky band. */
   filter:
     drop-shadow(0 2px 0 #4a2c12)
-    drop-shadow(0 2px 1px rgba(0, 0, 0, 0.55))
+    drop-shadow(0 2px 2px rgba(0, 0, 0, 0.70))
+    drop-shadow(0 0 1px #15100a)
     drop-shadow(0 0 1px #15100a);
 }
 
@@ -194,23 +195,41 @@ body {
   text-indent: 0;
 }
 
+/* Floating-text legibility bedrock: every piece of text that floats without
+   (or on a thin) backing plate gets the shared dark drop shadow. */
+.entry-info,
+.show-name,
+.show-status,
+.swatch-label,
+.room-list-header,
+.list-empty,
+.server-section summary,
+#connStatus,
+#menuError {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+}
+
 .menu-shell input {
   width: 100%;
   padding: 12px 14px;
   font-size: 16px; /* >= 16px prevents iOS focus zoom */
   font-family: inherit;
   color: var(--text);
-  background: #1f140c;
-  border: 2px solid var(--panel-edge-out);
+  background: rgba(26, 17, 10, 0.7);
+  border: 2px solid var(--field-border);
   border-radius: 6px;
   outline: none;
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.35);
+  box-shadow:
+    inset 0 2px 4px rgba(0, 0, 0, 0.35),
+    0 2px 8px rgba(0, 0, 0, 0.35);
   -webkit-user-select: text;
   user-select: text;
 }
 
 .menu-shell input:focus { border-color: var(--copper); }
-.menu-shell input::placeholder { color: #8a7355; }
+/* Placeholder >=4.5:1 against the input's own .7 strip across the full sky
+   range (the old #c2ab7c grazed ~4.45:1 over the brightest horizon band). */
+.menu-shell input::placeholder { color: var(--muted); }
 
 /* ---------- Buttons: beveled pixel look ----------
    2px dark frame + inset bevel (light top-left, dark bottom-right);
@@ -231,7 +250,8 @@ body {
     inset 0 2px 0 rgba(255, 235, 190, 0.28),
     inset 2px 0 0 rgba(255, 235, 190, 0.14),
     inset 0 -2px 0 rgba(0, 0, 0, 0.32),
-    inset -2px 0 0 rgba(0, 0, 0, 0.18);
+    inset -2px 0 0 rgba(0, 0, 0, 0.18),
+    0 2px 8px rgba(0, 0, 0, 0.45); /* lift off the terrain */
   cursor: pointer;
   touch-action: manipulation;
 }
@@ -244,7 +264,8 @@ body {
     inset 0 2px 0 rgba(0, 0, 0, 0.32),
     inset 2px 0 0 rgba(0, 0, 0, 0.18),
     inset 0 -2px 0 rgba(255, 235, 190, 0.16),
-    inset -2px 0 0 rgba(255, 235, 190, 0.10);
+    inset -2px 0 0 rgba(255, 235, 190, 0.10),
+    0 1px 4px rgba(0, 0, 0, 0.45);
 }
 
 /* Keyboard focus: the UA default outline is hard to see on the dark wood
@@ -339,13 +360,19 @@ body {
 
 /* ---------- Entry page ---------- */
 
+/* Narrow translucent walnut strip — the info block's own floating plate. */
 .entry-info {
   margin: 0 0 16px;
   padding: 8px 12px;
-  background: var(--field);
-  border: 1px solid var(--field-border);
+  /* Deepened from the spec'd .55 so the contract-locked gold .room-own
+     (#f1c40f on entryRoomName) clears 4.5:1 over the brightest horizon band
+     (#f1c40f itself must not change). */
+  background: rgba(26, 17, 10, 0.62);
+  border: 1px solid var(--copper);
   border-radius: 8px;
-  box-shadow: inset 0 1px 0 rgba(255, 230, 160, 0.10);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 230, 160, 0.10),
+    0 2px 8px rgba(0, 0, 0, 0.35);
 }
 
 .entry-row {
@@ -359,7 +386,7 @@ body {
 .entry-label {
   flex-shrink: 0;
   font-size: 12px;
-  color: var(--muted);
+  color: #e8d5a8; /* brightened: >=4.5:1 on the .62 strip even over bright sky */
 }
 
 .entry-value {
@@ -372,7 +399,7 @@ body {
   white-space: nowrap;
 }
 
-.entry-status { font-weight: 400; color: var(--muted); }
+.entry-status { font-weight: 400; color: #e8d5a8; }
 
 .btn-big {
   width: 100%;
@@ -407,7 +434,7 @@ body {
   margin: 0 0 14px;
   text-align: center;
   font-size: 13px;
-  color: var(--muted);
+  color: #e8d5a8; /* floats on raw sky — brightened + shared shadow */
 }
 
 .preview-wrap {
@@ -432,13 +459,14 @@ body {
 
 /* ---------- Select lists (characters & rooms) ---------- */
 
+/* List containers go transparent; each ROW is its own floating plank. */
 .select-list,
 .room-list {
   max-height: 200px;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  background: var(--field);
-  border: 1px solid var(--field-border);
+  background: none;
+  border: 0;
   border-radius: 6px;
 }
 
@@ -450,15 +478,19 @@ body {
   gap: 6px;
   min-height: 48px;
   padding: 4px 8px 4px 12px;
+  margin: 0 0 6px; /* plank gap */
   font-size: 14px;
   cursor: pointer;
-  border-bottom: 1px solid rgba(122, 90, 38, 0.45);
+  background: rgba(42, 28, 18, 0.88);
+  border: 1px solid rgba(201, 162, 39, 0.5);
+  border-radius: 6px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
 }
 
-.select-row:last-child { border-bottom: 0; }
-.select-row:hover { background: rgba(255, 210, 140, 0.07); }
-.select-row:active { background: rgba(241, 196, 15, 0.16); }
-.select-row.current { background: rgba(241, 196, 15, 0.10); }
+.select-row:last-child { margin-bottom: 0; }
+.select-row:hover { background: rgba(56, 38, 24, 0.92); }
+.select-row:active { background: rgba(68, 47, 26, 0.94); border-color: rgba(241, 196, 15, 0.7); }
+.select-row.current { background: rgba(56, 40, 18, 0.92); border-color: var(--gold); }
 
 /* JS-generated 40px portrait thumb (sizing is inline; this is just dressing). */
 .avatar-thumb {
@@ -501,7 +533,8 @@ body {
   border-radius: 6px;
   box-shadow:
     inset 0 2px 0 rgba(255, 255, 255, 0.25),
-    inset 0 -2px 0 rgba(0, 0, 0, 0.28);
+    inset 0 -2px 0 rgba(0, 0, 0, 0.28),
+    0 2px 8px rgba(0, 0, 0, 0.45);
   cursor: pointer;
   touch-action: manipulation;
 }
@@ -523,7 +556,7 @@ body {
   padding: 16px 12px;
   text-align: center;
   font-size: 13px;
-  color: var(--muted);
+  color: #e8d5a8; /* floats on raw sky — brightened + shared shadow */
 }
 
 /* ---------- Character designer ---------- */
@@ -534,7 +567,7 @@ body {
   margin: 0 0 4px;
   font-size: 12px;
   letter-spacing: 1px;
-  color: var(--muted);
+  color: #e8d5a8; /* floats on raw sky — brightened + shared shadow */
 }
 
 #bodyList {
@@ -554,6 +587,7 @@ body {
   background: rgba(31, 20, 12, 0.9);
   border: 2px solid #5a4326;
   border-radius: 6px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
   cursor: pointer;
   touch-action: manipulation;
   white-space: nowrap;
@@ -563,17 +597,28 @@ body {
 
 .body-option:hover { border-color: var(--copper); }
 
+/* Selected = gold tint LAYERED over the dark plank (the plank must stay
+   opaque now that there is no big panel behind it). */
 .body-option.selected {
   color: #ffe9a8;
   border-color: var(--gold);
-  background: rgba(241, 196, 15, 0.12);
+  background-color: rgba(31, 20, 12, 0.9);
+  background-image: linear-gradient(rgba(241, 196, 15, 0.16), rgba(241, 196, 15, 0.16));
 }
 
+/* Each swatch group sits on its own narrow backing strip. The strip bleeds
+   6px into the shell side padding (22px normal / 14px narrow — no overflow)
+   so its own 5px padding + 1px border don't narrow the swatches below the
+   pre-strip touch-width baseline (36px @360 shell, 36.5px @380 viewport). */
 .swatch-row {
   display: grid;
   grid-template-columns: repeat(8, 1fr);
   gap: 4px;
-  margin: 0 0 12px;
+  margin: 0 -6px 12px;
+  padding: 5px;
+  background: rgba(26, 17, 10, 0.7);
+  border: 1px solid var(--field-border);
+  border-radius: 6px;
 }
 
 .swatch-row-skin { grid-template-columns: repeat(6, 1fr); }
@@ -600,18 +645,23 @@ body {
   background: linear-gradient(180deg, rgba(58, 36, 20, 0.85), rgba(34, 21, 12, 0.92));
   border: 2px solid var(--copper);
   border-radius: 6px;
-  box-shadow: 0 0 0 1px var(--panel-edge-out), inset 0 0 0 1px rgba(255, 230, 160, 0.18);
+  box-shadow:
+    0 0 0 1px var(--panel-edge-out),
+    inset 0 0 0 1px rgba(255, 230, 160, 0.18),
+    0 6px 18px rgba(0, 0, 0, 0.40);
 }
 
 /* ---------- Room select page ---------- */
 
-/* Server mini-section: collapsed to one summary line by default. */
+/* Server mini-section: collapsed to one summary line by default.
+   Carries its own floating backing strip. */
 .server-section {
   margin: 0 0 10px;
   background: var(--field);
   border: 1px solid var(--field-border);
   border-radius: 6px;
   padding: 0 10px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
 }
 
 .server-section summary {
@@ -639,14 +689,18 @@ body {
   white-space: nowrap;
 }
 
-#connStatus.ok { color: var(--accent); }
-#connStatus.bad { color: var(--danger); }
+/* Brightened one step: keep >=4.5:1 on the translucent strip over bright sky. */
+#connStatus.ok { color: #6fd653; }
+#connStatus.bad { color: #ff9c8d; }
 
 .menu-shell .server-input {
   font-size: 12px;
   padding: 8px 10px;
   margin: 0 0 10px;
-  opacity: 0.85;
+  /* De-emphasized via muted text color, NOT opacity: a whole-element opacity
+     would also thin this input's own .7 backing strip and sink the placeholder
+     below the 4.5:1 floor over the bright horizon band. */
+  color: var(--muted);
 }
 
 /* Room-name input + find button share one row. */
@@ -654,14 +708,18 @@ body {
 .find-row #roomNameInput { flex: 1; min-width: 0; }
 .find-row .btn-primary { flex-shrink: 0; }
 
-/* "Not found — create it?" prompt, hidden until a lookup misses. */
+/* "Not found — create it?" prompt, hidden until a lookup misses.
+   Own dark backing strip (it no longer sits on the big panel); the faint
+   green tint is layered on top to keep the "create" affordance. */
 #createPrompt {
   display: none;
   margin-top: 10px;
   padding: 12px;
-  background: rgba(93, 187, 70, 0.10);
-  border: 2px solid rgba(93, 187, 70, 0.45);
+  background-color: rgba(26, 17, 10, 0.7);
+  background-image: linear-gradient(rgba(93, 187, 70, 0.10), rgba(93, 187, 70, 0.10));
+  border: 1px solid var(--field-border);
   border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
 }
 
 #createPrompt.show { display: block; }
@@ -680,7 +738,7 @@ body {
   margin: 12px 0 6px;
   font-size: 13px;
   letter-spacing: 1px;
-  color: var(--muted);
+  color: #e8d5a8; /* floats on raw sky — brightened + shared shadow */
 }
 
 #currentRoomRow { max-height: none; }
@@ -707,6 +765,7 @@ body {
   background: var(--field);
   border: 1px solid var(--field-border);
   border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
   cursor: pointer;
   white-space: nowrap;
 }
@@ -726,7 +785,7 @@ body {
   margin: 12px 0 0;
   text-align: center;
   font-size: 14px;
-  color: var(--danger);
+  color: #ff8a7a; /* brightened danger — floats on raw sky with shared shadow */
 }
 
 /* ---------- HUD ---------- */
