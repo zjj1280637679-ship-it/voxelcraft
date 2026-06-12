@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">VoxelCraft</string>
-    <string name="title_activity_main">VoxelCraft</string>
+    <string name="app_name">永远的山根乡</string>
+    <string name="title_activity_main">永远的山根乡</string>
     <string name="package_name">com.voxelcraft.app</string>
     <string name="custom_url_scheme">com.voxelcraft.app</string>
 </resources>

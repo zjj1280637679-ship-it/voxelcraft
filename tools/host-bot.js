@@ -12,7 +12,7 @@ const target = process.argv[3] || 'localhost:8080';
 const url = `ws://${target.includes(':') ? target : target + ':8080'}/ws`;
 const seed = Number(process.argv[4]) || 12345;
 
-const OWN = { name: '机器人房主', p: [8, 40, 8], ry: 0, skin: { s: 1, p: 5 } };
+const OWN = { name: '机器人房主', p: [8, 40, 8], ry: 0, skin: { b: 1, t: 1, p: 5, k: 1 } };
 
 let ownId = null;
 let hostedRoom = null;     // display name echoed by the relay
@@ -20,13 +20,24 @@ const members = new Map(); // id -> { name, skin, p, ry, helloed }
 const edits = new Map();   // 'x,y,z' -> block id
 const moveLogAt = new Map(); // id -> last move log time (avoid 10 Hz flood)
 
-// Host-side skin validation per DESIGN: both indices integers 0..7, else {s:0,p:0}.
+// Skin v2 validation/migration — the SHARED rule, identical to public/js/host.js:
+// 1) v2 {b,t,p,k} all integers in range (b 0..7, t 0..7, p 0..7, k 0..5) -> as-is;
+// 2) legacy {s,p} integers 0..7 -> {b:1, t:s, p:p, k:1};
+// 3) anything else -> {b:1, t:0, p:0, k:1}.
 function validSkin(skin) {
-  if (skin && Number.isInteger(skin.s) && skin.s >= 0 && skin.s <= 7 &&
-      Number.isInteger(skin.p) && skin.p >= 0 && skin.p <= 7) {
-    return { s: skin.s, p: skin.p };
+  if (skin && typeof skin === 'object') {
+    if (Number.isInteger(skin.b) && skin.b >= 0 && skin.b <= 7 &&
+        Number.isInteger(skin.t) && skin.t >= 0 && skin.t <= 7 &&
+        Number.isInteger(skin.p) && skin.p >= 0 && skin.p <= 7 &&
+        Number.isInteger(skin.k) && skin.k >= 0 && skin.k <= 5) {
+      return { b: skin.b, t: skin.t, p: skin.p, k: skin.k };
+    }
+    if (Number.isInteger(skin.s) && skin.s >= 0 && skin.s <= 7 &&
+        Number.isInteger(skin.p) && skin.p >= 0 && skin.p <= 7) {
+      return { b: 1, t: skin.s, p: skin.p, k: 1 };
+    }
   }
-  return { s: 0, p: 0 };
+  return { b: 1, t: 0, p: 0, k: 1 };
 }
 
 const ws = new WebSocket(url);
@@ -67,7 +78,7 @@ function handleGame(from, d) {
       m.helloed = true;
       sendTo(from, buildJoined(from));
       cast({ t: 'pjoin', id: from, name: m.name, p: m.p, ry: m.ry, skin: m.skin }, from);
-      log(`hello from #${from} "${m.name}" skin={s:${m.skin.s},p:${m.skin.p}} -> sent joined (seed=${seed}, edits=${edits.size}), cast pjoin`);
+      log(`hello from #${from} "${m.name}" skin={b:${m.skin.b},t:${m.skin.t},p:${m.skin.p},k:${m.skin.k}} -> sent joined (seed=${seed}, edits=${edits.size}), cast pjoin`);
       break;
     }
     case 'move': {
@@ -120,7 +131,7 @@ ws.on('message', (data) => {
       log(`hosting "${hostedRoom}" as #${ownId}, seed=${seed} — waiting for members`);
       break;
     case 'peer-in':
-      members.set(msg.id, { name: null, skin: { s: 0, p: 0 }, p: OWN.p.slice(), ry: 0, helloed: false });
+      members.set(msg.id, { name: null, skin: { b: 1, t: 0, p: 0, k: 1 }, p: OWN.p.slice(), ry: 0, helloed: false });
       log(`peer-in #${msg.id} (pending hello)`);
       break;
     case 'peer-out': {

@@ -1,16 +1,35 @@
 // Scene / camera / chunk-mesh / avatar owner. One shared material for all
 // chunks; geometries are disposed whenever a chunk mesh is rebuilt or removed.
 import * as THREE from '../lib/three.module.js';
-import { CHUNK, PALETTE, chunkKey } from './constants.js';
+import { CHUNK, PALETTE, SKIN_TONES, BODIES, chunkKey } from './constants.js';
 import { buildAtlas } from './textures.js';
 import { buildChunkGeometry } from './mesher.js';
 
 const SKY = 0x87ceeb;
 const LERP_RATE = 10; // avatar interpolation, ~10/s toward network target
-const HEAD_COLOR = '#e0ac69'; // fixed skin tone for every avatar head
 
-function validPaletteIndex(v) {
-  return Number.isInteger(v) && v >= 0 && v < PALETTE.length;
+// SHARED skin v2 validation/migration rule (DESIGN.md): v2 {b,t,p,k} in range
+// -> copy; legacy {s,p} 0..7 -> {b:1,t:s,p:p,k:1}; else {b:1,t:0,p:0,k:1}.
+// Replaces the old id-derived color fallback.
+function cleanSkin(skin) {
+  if (skin && typeof skin === 'object') {
+    const { b, t, p, k } = skin;
+    if (
+      Number.isInteger(b) && b >= 0 && b < BODIES.length &&
+      Number.isInteger(t) && t >= 0 && t < PALETTE.length &&
+      Number.isInteger(p) && p >= 0 && p < PALETTE.length &&
+      Number.isInteger(k) && k >= 0 && k < SKIN_TONES.length
+    ) {
+      return { b, t, p, k };
+    }
+    if (
+      Number.isInteger(skin.s) && skin.s >= 0 && skin.s < PALETTE.length &&
+      Number.isInteger(skin.p) && skin.p >= 0 && skin.p < PALETTE.length
+    ) {
+      return { b: 1, t: skin.s, p: skin.p, k: 1 };
+    }
+  }
+  return { b: 1, t: 0, p: 0, k: 1 };
 }
 
 function angleDelta(a, b) {
@@ -149,44 +168,39 @@ export class Renderer {
     this.highlight.visible = true;
   }
 
-  // skin = {s, p} PALETTE indices (shirt/pants). Invalid or missing skins
-  // fall back to a stable id-derived pair so old payloads still render.
+  // skin v2 {b,t,p,k}; legacy {s,p} payloads are migrated, anything else
+  // collapses to the default skin (shared rule, see cleanSkin).
   addPlayer(id, name, skin) {
     if (this.players.has(id)) this.removePlayer(id);
-    let s, p;
-    if (skin && typeof skin === 'object' && validPaletteIndex(skin.s) && validPaletteIndex(skin.p)) {
-      s = skin.s;
-      p = skin.p;
-    } else {
-      const base = Number.isInteger(id) && id >= 0 ? id : 0;
-      s = base % PALETTE.length;
-      p = (base + 3) % PALETTE.length;
-    }
+    const { b, t, p, k } = cleanSkin(skin);
+    const { w, h, fem } = BODIES[b];
+    const tw = fem ? w * 0.92 : w; // female torso x/z narrowed
 
     const group = new THREE.Group();
 
-    // Stacked boxy avatar, group origin = feet: legs 0..0.6, torso 0.6..1.2,
-    // head 1.2..1.7 (same total height as the old two-part avatar).
-    const legsGeo = new THREE.BoxGeometry(0.6, 0.6, 0.3);
+    // Stacked boxy avatar, group origin = feet. Base stack (w=h=1):
+    // legs 0..0.6, torso 0.6..1.2, head 1.2..1.7. x/z sizes scale by body w
+    // (torso by tw), y sizes AND stack positions by body h.
+    const legsGeo = new THREE.BoxGeometry(0.6 * w, 0.6 * h, 0.3 * w);
     const legsMat = new THREE.MeshLambertMaterial({ color: new THREE.Color(PALETTE[p]) });
     const legs = new THREE.Mesh(legsGeo, legsMat);
-    legs.position.y = 0.3;
+    legs.position.y = 0.3 * h;
     group.add(legs);
 
-    const torsoGeo = new THREE.BoxGeometry(0.6, 0.6, 0.3);
-    const torsoMat = new THREE.MeshLambertMaterial({ color: new THREE.Color(PALETTE[s]) });
+    const torsoGeo = new THREE.BoxGeometry(0.6 * tw, 0.6 * h, 0.3 * tw);
+    const torsoMat = new THREE.MeshLambertMaterial({ color: new THREE.Color(PALETTE[t]) });
     const torso = new THREE.Mesh(torsoGeo, torsoMat);
-    torso.position.y = 0.9;
+    torso.position.y = 0.9 * h;
     group.add(torso);
 
-    const headGeo = new THREE.BoxGeometry(0.5, 0.5, 0.5);
-    const headMat = new THREE.MeshLambertMaterial({ color: new THREE.Color(HEAD_COLOR) });
+    const headGeo = new THREE.BoxGeometry(0.5 * w, 0.5 * h, 0.5 * w);
+    const headMat = new THREE.MeshLambertMaterial({ color: new THREE.Color(SKIN_TONES[k]) });
     const head = new THREE.Mesh(headGeo, headMat);
-    head.position.y = 1.45;
+    head.position.y = 1.45 * h;
     group.add(head);
 
     const sprite = makeNameSprite(name);
-    sprite.position.y = 2.05;
+    sprite.position.y = 1.7 * h + 0.35;
     group.add(sprite);
 
     group.position.set(8, 40, 8); // server default until first pmove

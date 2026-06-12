@@ -24,11 +24,29 @@ export const HOTBAR = [
   BLOCK.LOG, BLOCK.LEAVES, BLOCK.PLANK, BLOCK.BRICK,
 ];
 
-// Character skin palette: exactly 8 hex colors. skin = {s, p} are indices
-// into this array for shirt (torso) and pants (legs).
+// Character color palette: exactly 8 hex colors. skin v2 = {b,t,p,k};
+// t (top) and p (pants) index into this array.
 export const PALETTE = [
   '#e74c3c', '#e67e22', '#f1c40f', '#5dbb46',
   '#1abc9c', '#3498db', '#9b59b6', '#e8ecf2',
+];
+
+// 6 skin tones, light -> dark. Index 1 === the legacy fixed head color #e0ac69,
+// so migrated characters keep their old look.
+export const SKIN_TONES = ['#f7d7b6', '#e0ac69', '#c98e54', '#a9743f', '#8d5524', '#5d3a1a'];
+
+// 8 body types for skin v2. w scales avatar box x/z, h scales y; fem additionally
+// scales the TORSO x/z by 0.92 (applied at render time, not stored here).
+// (瘦 w=0.82, 壮 w=1.18, reference standard = 1; 矮 h=0.86, 高 h=1.08.)
+export const BODIES = [
+  { label: '男·矮瘦', w: 0.82, h: 0.86, fem: false }, // 0
+  { label: '男·高瘦', w: 0.82, h: 1.08, fem: false }, // 1  <- legacy-migration default
+  { label: '男·矮壮', w: 1.18, h: 0.86, fem: false }, // 2
+  { label: '男·高壮', w: 1.18, h: 1.08, fem: false }, // 3
+  { label: '女·矮瘦', w: 0.82, h: 0.86, fem: true  }, // 4
+  { label: '女·高瘦', w: 0.82, h: 1.08, fem: true  }, // 5
+  { label: '女·矮壮', w: 1.18, h: 0.86, fem: true  }, // 6
+  { label: '女·高壮', w: 1.18, h: 1.08, fem: true  }, // 7
 ];
 
 export const PLAYER = {

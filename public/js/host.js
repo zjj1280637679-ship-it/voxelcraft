@@ -3,7 +3,7 @@
 // (background tabs throttle timers, ws message handlers keep firing).
 // No three.js, no DOM: pure game-state + relay messaging.
 
-import { HEIGHT, BLOCK, PALETTE } from './constants.js';
+import { HEIGHT, BLOCK, PALETTE, SKIN_TONES, BODIES } from './constants.js';
 
 // New members are announced at the nominal spawn column until their first
 // move arrives (matches v1 server behavior).
@@ -19,17 +19,30 @@ function cleanName(name) {
   return s || '玩家';
 }
 
-// Skins cross the member trust boundary: accept only {s,p} integer PALETTE
-// indices, anything else collapses to the default skin.
+// Skins cross the member trust boundary. SHARED v2 validation/migration rule
+// (DESIGN.md — identical in host.js, main.js member side and the tools bots):
+// 1. v2 {b,t,p,k} all integers in range -> copy (drop extra keys);
+// 2. legacy {s,p} integers 0..7 -> {b:1, t:s, p:p, k:1};
+// 3. anything else -> {b:1, t:0, p:0, k:1}.
 function cleanSkin(skin) {
-  if (
-    skin && typeof skin === 'object' &&
-    Number.isInteger(skin.s) && skin.s >= 0 && skin.s < PALETTE.length &&
-    Number.isInteger(skin.p) && skin.p >= 0 && skin.p < PALETTE.length
-  ) {
-    return { s: skin.s, p: skin.p };
+  if (skin && typeof skin === 'object') {
+    const { b, t, p, k } = skin;
+    if (
+      Number.isInteger(b) && b >= 0 && b < BODIES.length &&
+      Number.isInteger(t) && t >= 0 && t < PALETTE.length &&
+      Number.isInteger(p) && p >= 0 && p < PALETTE.length &&
+      Number.isInteger(k) && k >= 0 && k < SKIN_TONES.length
+    ) {
+      return { b, t, p, k };
+    }
+    if (
+      Number.isInteger(skin.s) && skin.s >= 0 && skin.s < PALETTE.length &&
+      Number.isInteger(skin.p) && skin.p >= 0 && skin.p < PALETTE.length
+    ) {
+      return { b: 1, t: skin.s, p: skin.p, k: 1 };
+    }
   }
-  return { s: 0, p: 0 };
+  return { b: 1, t: 0, p: 0, k: 1 };
 }
 
 export class HostRoom {
@@ -143,7 +156,7 @@ export class HostRoom {
       if (id === forId || !m.helloed) continue;
       players.push({
         id, name: m.name, p: [m.p[0], m.p[1], m.p[2]], ry: m.ry,
-        skin: m.skin || { s: 0, p: 0 },
+        skin: m.skin || { b: 1, t: 0, p: 0, k: 1 },
       });
     }
     const edits = [];

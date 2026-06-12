@@ -51,7 +51,7 @@ function handleGame(d) {
     case 'joined': {
       joined = true;
       const players = (d.players ?? [])
-        .map((p) => `${p.id}:${p.name}(skin=${p.skin ? `s${p.skin.s}/p${p.skin.p}` : 'none'})`)
+        .map((p) => `${p.id}:${p.name}(skin=${p.skin ? `b${p.skin.b}/t${p.skin.t}/p${p.skin.p}/k${p.skin.k}` : 'none'})`)
         .join('|') || '-';
       console.log(`JOINED id=${d.id} hostId=${hostId} seed=${d.seed} players=${players} edits=${(d.edits ?? []).length}`);
       startMoving();
@@ -88,7 +88,7 @@ ws.on('message', (data) => {
       myId = msg.id;
       hostId = msg.hostId;
       log(`accepted id=${myId} hostId=${hostId} -> sending hello`);
-      sendToHost({ t: 'hello', name: '手机玩家', skin: { s: 2, p: 6 } });
+      sendToHost({ t: 'hello', name: '手机玩家', skin: { b: 5, t: 2, p: 6, k: 3 } });
       break;
     case 'error':
       log(`error ${msg.code}`);
@@ -101,7 +101,7 @@ ws.on('message', (data) => {
         // Migration raced our initial hello (it died with the old host):
         // re-hello the new host per DESIGN.md, else 'joined' never arrives.
         log('joined never arrived -> re-sending hello to new host');
-        sendToHost({ t: 'hello', name: '手机玩家', skin: { s: 2, p: 6 } });
+        sendToHost({ t: 'hello', name: '手机玩家', skin: { b: 5, t: 2, p: 6, k: 3 } });
       }
       break;
     case 'promote':

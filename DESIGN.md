@@ -1,8 +1,14 @@
-# VoxelCraft — Architecture Contract (v2 — player-hosted rooms)
+# 《永远的山根乡》 — Architecture Contract (v3 — six-page menu · skin v2 · local world saves)
 
 A Minecraft-style voxel sandbox that runs in the **browser** on PC, Android and iOS,
 with **room-based multiplayer** over WebSocket. No build step: plain ES modules served
 statically. three.js is vendored at `public/lib/three.module.js` (r184).
+
+**Naming**: the game's player-facing name is **《永远的山根乡》** — used for `<title>`,
+the menu title and every piece of UI text (entry-page subtitle: 「回到你的方块世界」).
+**VoxelCraft** is retained strictly as the English codename: repo/package/file names,
+the `[vc]` log prefix, build artifacts. The string "VoxelCraft" must not appear in
+player-facing UI text.
 
 **v2 architecture**: the server is a game-agnostic **dumb relay** (room directory +
 byte forwarding, zero game logic). The player who creates a room is the **host**: their
@@ -33,19 +39,43 @@ report the deviation in your final output.
 
 | Group | Files |
 |---|---|
-| A server | `server/index.js` |
-| B shell/UI | `public/index.html`, `public/style.css`, `public/js/ui.js` |
+| A server | `server/index.js` — **zero changes this round** |
+| B shell/UI | `public/index.html`, `public/style.css`, `public/js/ui.js`, `public/js/menubg.js` (NEW) |
 | C data | `public/js/noise.js`, `public/js/terrain.js`, `public/js/world.js` |
 | D graphics | `public/js/textures.js`, `public/js/mesher.js`, `public/js/renderer.js` |
 | E input/physics | `public/js/player.js`, `public/js/controls-desktop.js`, `public/js/controls-touch.js` |
 | F glue | `public/js/network.js`, `public/js/host.js`, `public/js/main.js` |
 
-Do not modify: `package.json`. `public/js/constants.js` additionally exports
-`PALETTE` — exactly 8 hex color strings for character shirts/pants, e.g.
+Do not modify: `package.json`. `public/js/constants.js` exports
+`PALETTE` — exactly 8 hex color strings for character tops/pants (unchanged):
 `['#e74c3c','#e67e22','#f1c40f','#5dbb46','#1abc9c','#3498db','#9b59b6','#e8ecf2']`.
+
+This round constants.js ADDITIONALLY exports (exact contents are normative —
+whoever touches constants.js writes precisely these):
+
+```js
+// 6 skin tones, light -> dark. Index 1 === the legacy fixed head color #e0ac69,
+// so migrated characters keep their old look.
+export const SKIN_TONES = ['#f7d7b6', '#e0ac69', '#c98e54', '#a9743f', '#8d5524', '#5d3a1a'];
+
+// 8 body types for skin v2. w scales avatar box x/z, h scales y; fem additionally
+// scales the TORSO x/z by 0.92 (applied at render time, not stored here).
+// (瘦 w=0.82, 壮 w=1.18, reference standard = 1; 矮 h=0.86, 高 h=1.08.)
+export const BODIES = [
+  { label: '男·矮瘦', w: 0.82, h: 0.86, fem: false }, // 0
+  { label: '男·高瘦', w: 0.82, h: 1.08, fem: false }, // 1  <- legacy-migration default
+  { label: '男·矮壮', w: 1.18, h: 0.86, fem: false }, // 2
+  { label: '男·高壮', w: 1.18, h: 1.08, fem: false }, // 3
+  { label: '女·矮瘦', w: 0.82, h: 0.86, fem: true  }, // 4
+  { label: '女·高瘦', w: 0.82, h: 1.08, fem: true  }, // 5
+  { label: '女·矮壮', w: 1.18, h: 0.86, fem: true  }, // 6
+  { label: '女·高壮', w: 1.18, h: 1.08, fem: true  }, // 7
+];
+```
+
 Read constants.js before implementing — use its exports
-(`CHUNK`, `HEIGHT`, `BLOCK`, `HOTBAR`, `PLAYER`, `PALETTE`, `chunkIndex`,
-`chunkKey`, `blockKey`).
+(`CHUNK`, `HEIGHT`, `BLOCK`, `HOTBAR`, `PLAYER`, `PALETTE`, `SKIN_TONES`,
+`BODIES`, `chunkIndex`, `chunkKey`, `blockKey`).
 
 ## Coordinates & chunks
 
@@ -111,32 +141,52 @@ List entries are `{room: <display name>, players, meta}`. No seed, no edits,
 no positions — zero game knowledge; `meta` is opaque bytes to the relay.
 
 Meta convention (parsed by CLIENTS only, never by the relay): `{n: <string ≤24>}`
-— the host player's name. The lobby renders a room row as
+— the host player's name. The room-select page renders a public-room row as
 "<房间名> · <N>人"(meta unused for now but kept for future fields). Treat meta
 as attacker-controlled: render with textContent only, tolerate any shape.
 
 ### Game layer (inside `d`; host's browser is the authority)
 
-**Characters & skins.** A player presents as a character `{name, skin}` where
-`skin = {s: <0..7>, p: <0..7>}` — indices into `PALETTE` (new export in
-constants.js: array of 8 hex colors) for shirt (`s`) and pants (`p`). The host
-validates inbound skins (integers in range, else `{s:0, p:0}`); clients render
-remote players' bodies with these colors. Characters are a pure client concept
-stored in localStorage; the protocol only ever carries `{name, skin}`.
+**Characters & skins — protocol v2.** A player presents as a character
+`{name, skin}` where `skin = {b, t, p, k}`, ALL integers:
+- `b` body type, index into `BODIES` (constants.js), 0..7 — fixed order:
+  男矮瘦 0, 男高瘦 1, 男矮壮 2, 男高壮 3, 女矮瘦 4, 女高瘦 5, 女矮壮 6, 女高壮 7;
+- `t` top (上衣) color, index into `PALETTE`, 0..7;
+- `p` pants (裤子) color, index into `PALETTE`, 0..7;
+- `k` skin tone (肤色), index into `SKIN_TONES`, 0..5.
+
+**Validation & legacy migration — ONE shared rule**, implemented identically in
+all THREE places that accept a skin from outside: host.js (inbound `hello`,
+`adoptMembers`), main.js member side (`joined.players`, `pjoin`), and the tools
+bots (`tools/host-bot.js`, `tools/member-bot.js`). Checked in this order:
+1. **v2 shape**: `b,t,p,k` all integers and in range (`0<=b<=7`, `0<=t<=7`,
+   `0<=p<=7`, `0<=k<=5`) → take `{b,t,p,k}` as-is (copy; drop extra keys).
+2. **legacy shape**: `s` and `p` both integers in `0..7` → migrate to
+   `{b:1, t:s, p:p, k:1}`.
+3. **anything else** → default `{b:1, t:0, p:0, k:1}`.
+
+The wire may still carry legacy `{s,p}` skins (old clients/bots); every receiver
+migrates on input, and a host only ever re-broadcasts validated v2 skins.
+Characters are a pure client concept stored in localStorage (`vc-chars`, owned by
+ui.js); legacy stored characters are **lazily migrated on read with the SAME
+rule**. The protocol only ever carries `{name, skin}`.
 
 member → host:
-- `{t:'hello', name, skin}` — sent right after `accepted`; re-sent to the new host
+- `{t:'hello', name, skin}` — e.g. `{t:'hello', name:'阿明', skin:{b:5, t:2, p:6, k:3}}`.
+  Sent right after `accepted`; re-sent to the new host
   if `newhost` arrives before `joined` (the original hello may have died with the
   old host). On a duplicate hello the host re-unicasts `joined`, nothing else.
 - `{t:'move', p:[x,y,z], ry, rx}` — feet pos, yaw, pitch. ≤ ~12 Hz.
 - `{t:'block', x, y, z, id}` — block edit (id 0 = broken).
 
 host → member(s):
-- `{t:'joined', room, seed, id, players:[{id,name,p,ry,skin}], edits:[[x,y,z,id],...]}`
+- `{t:'joined', room, seed, id, players:[{id,name,p,ry,skin:{b,t,p,k}}], edits:[[x,y,z,id],...]}`
   — unicast reply to `hello`. `id` = recipient's relay id. `players` includes the
-  host itself, excludes the recipient. `edits` serialized from host's `world.edits`.
-- `{t:'pjoin', id, name, p, ry, skin}` — broadcast to others when a member's hello
-  is accepted.
+  host itself, excludes the recipient; every `skin` is a host-validated v2 object,
+  e.g. `players:[{id:1, name:'山根乡长', p:[8,40,8], ry:0, skin:{b:1, t:0, p:0, k:1}}]`.
+  `edits` serialized from host's `world.edits`.
+- `{t:'pjoin', id, name, p, ry, skin:{b,t,p,k}}` — broadcast to others when a
+  member's hello is accepted (skin already host-validated v2).
 - `{t:'pmove', id, p, ry, rx}` — relayed member moves AND the host's own moves
   (host stamps its own id).
 - `{t:'pleave', id}` — on `peer-out`.
@@ -173,6 +223,71 @@ Host migration (game layer consequences):
 - Known accepted edge: a member promoted before it ever received `joined` has no world
   and cannot host; it should disconnect, letting the relay promote the next member.
 
+## Enter-world algorithm (进入世界 — zero-confirmation chain)
+
+Owned by main.js; ui.js only fires the handlers. The entry page's `#enterWorldBtn`
+(`onEnterWorld()`) must reach the game with ZERO further confirmations:
+
+1. `ensureCharacter()` (ui.js): no character exists → silently generate a random
+   one (random Chinese name + random valid v2 skin), persist as active. Never
+   prompts, never navigates.
+2. `last = getLastRoom()` (`vc-lastroom`):
+   - **no last room** → generate a random Chinese room name (the existing
+     generator: adjective + place + 2-digit number) and HOST it as a new
+     **public** room.
+   - **has last room** → `join(last)`:
+     - `accepted` → normal member flow.
+     - `no-room` → `getWorldSave(last)`:
+       - save exists → HOST the room using the **saved `{seed, edits}`** (apply
+         the saved edits to the new World before `startGame`). The world is
+         reborn — this is the 「世界不消失」 design point.
+       - no save → HOST a brand-new world under the same name.
+     - `taken` (create race while hosting) → existing automatic fallback to
+       `join` (unchanged).
+3. On session start (both modes): `setLastRoom(room)` +
+   `recordHistory(room, mode === 'host')`.
+
+Room-select page actions map onto the same machinery:
+- row **「使用」** and **`#findRoomBtn`** with a typed name = the SAME chain as
+  step 2's "has last" branch (with that name), with ONE difference at the end:
+  `no-room` + no world save → `showCreatePrompt(name)` 「没有找到「X」」 (confirm
+  → `onCreateRoom`) instead of silent creation. Empty input + `#findRoomBtn` =
+  the existing random-name one-shot (ui.js generates a name, fills the input,
+  runs the chain; the matching `showCreatePrompt` auto-creates once, skipping
+  the prompt).
+- **`#createRoomBtn` 建立新房间** = explicitly a NEW world:
+  `onCreateRoom(name, publicToggle.checked)` with **NO world-save lookup** — a
+  stale save must never hijack a deliberately fresh room. Empty input → random
+  name first.
+- history row **「移除」** = `confirm()` then delete the history entry AND its
+  `removeWorldSave(name)` (both inside ui.js).
+- public row **「隐藏」** = add the normalized name to `vc-hidden`, re-render.
+
+## Local world saves (世界本地存档)
+
+Host AND members all save — every player who ever entered a room can later
+rebuild it (deliberate design, not an accident). Storage is owned by ui.js:
+
+- localStorage `vc-worlds` =
+  `{ [normRoomKey(room)]: {room: <display name>, seed: <int>, edits: [[x,y,z,id],...], t: <ms timestamp of last save>} }`.
+- Capacity: max **8** worlds; inserting beyond that evicts the entry with the
+  oldest `t`.
+- A single world whose edits exceed **60000** entries is REFUSED — `putWorldSave`
+  becomes a no-op and emits `console.warn` once per session. Never throw, never
+  write partially (quota/JSON failures likewise: try/catch, warn once, no-op).
+- `normRoomKey(raw)` (exported by ui.js) mirrors the server normalization
+  exactly: `NFC + trim + collapse internal whitespace runs + toLowerCase`.
+
+Save timing (main.js drives, ui.js stores):
+- on `startGame` (both modes): one immediate
+  `putWorldSave(room, seed, editsFromWorld())`;
+- afterwards EVERY world mutation — own `setBlock`, member-applied `block`,
+  host-applied member edits, `resync` merge — schedules a save **debounced 2 s**
+  (the debounce timer lives in main.js; the no-timer rule binds host.js only);
+- exit / disconnect / `stopGame`: flush any pending save synchronously before
+  teardown;
+- `edits` are serialized from `world.edits` exactly like `buildJoined` does.
+
 ## Module contracts
 
 ### A. `server/index.js` (dumb relay)
@@ -199,114 +314,224 @@ Host migration (game layer consequences):
 ### B. shell/UI
 `public/index.html`:
 - `<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">`
+- `<title>永远的山根乡</title>`.
 - Required element ids (others may use them): `gameCanvas` (the WebGL canvas);
-  `menu` (overlay hosting TWO pages, exactly one visible at a time):
-  - **`profilePage`** (人物页, shown first): character card list `charList`
-    (each card: 2D canvas preview of the boxy avatar in its colors + name;
-    tap = select & go to lobby; an "编辑" affordance per card), new-character
-    button `newCharBtn`; character editor `charEditor` (shown when creating/
-    editing): name input `charNameInput` (maxlength 16), shirt swatch row
-    `shirtSwatches` + pants swatch row `pantsSwatches` (8 PALETTE swatches each,
-    selected one highlighted), live preview canvas `charPreview`, save
-    `saveCharBtn`, cancel `cancelCharBtn`, delete `deleteCharBtn` (edit mode only).
-  - **`lobbyPage`** (房间页): connection status `connStatus` + server input
-    `serverInput`; active-character row: label `activeCharLabel`("人物：xx")+
-    switch button `switchCharBtn`("换人物" → back to profilePage); the single
-    **room-name input `roomNameInput`** (placeholder "房间名（留空 = 随机新房间）",
-    1–16 **code points** validated in JS — HTML maxlength counts UTF-16 units
-    and must NOT be used on this input) + go button `goBtn`("进入房间");
-    create prompt `createPrompt`
-    (hidden by default: text "没有找到「xx」" + public checkbox `publicToggle`
-    (default checked, "公开房间") + confirm button `confirmCreateBtn`
-    ("创建这个房间")); **history section** `historyHeader`("我的足迹") +
-    `historyList` (above the public list, both hidden when history is empty);
-    "其他公开房间" list header with `refreshBtn` → `roomList`;
-    error line `menuError`.
-  - **Empty room name + 进入房间 = a random new room**: ui.js generates a random
-    Chinese room name (adjective + place + 2-digit number, e.g. "迷雾森林42";
-    pools of ≥8 adjectives / ≥8 places; ≤16 code points), fills it into
-    `roomNameInput`, and runs the normal onEnterRoom flow — but remembers the
-    generated name, and when `showCreatePrompt(thatName)` comes back it SKIPS the
-    prompt and directly calls `onCreateRoom(name, server, publicToggle.checked)`
-    (one-shot: the flag clears after use, so a later manual retry shows the
-    prompt normally). If the random name happens to exist, the player simply
-    joins it.
-  - **History ("我的足迹")**: ui.js owns localStorage `vc-history` — array of
-    `{room, host: bool, t}` (newest first, max 20, deduped by client-side
-    normalized name: NFC + trim + collapse spaces + toLowerCase). Recorded via
-    `recordHistory(room, isHost)` (called by main on entering a room; `host=true`
-    when the player created it — once true it stays true on later visits).
-    Rendering merges the latest live room list: a history row shows
-    "房间名 · N人" when live, "房间名 · 不在线" otherwise; rows where
-    `host === true` render the name in gold (`.room-own`, color #f1c40f) —
-    自己创建过的房间. Each history row has a small "×" delete button
-    (≥40px touch target, click must NOT trigger the row's join): it removes the
-    LOCAL history entry only — a live world is never affected by it (the only
-    way a live room ends is everyone leaving; a host who leaves abdicates and
-    the oldest member inherits — existing migration). Rows in `roomList`
-    (其他公开房间) exclude live rooms already shown in the history section.
-  `hud` (crosshair `crosshair`, hotbar `hotbar`, room label `roomLabel`,
-  exit button `exitBtn` — top-right, label "退出", pointer-events auto, touch
-  target ≥40px),
-  `touchUI` (joystick base `joystick`, knob `joyKnob`, jump button `jumpBtn`),
-  toast container `toast`.
+  `menu` (overlay hosting **SIX pages**, exactly one visible at a time; design
+  rule: **show pages carry only the subject + entry buttons; lists live only on
+  select pages**) plus ONE shared error line `menuError` placed in the menu
+  shell so it is visible from whichever page is active:
+
+  1. **`entryPage`** 世界入口首页 — title 「永远的山根乡」 + subtitle
+     「回到你的方块世界」; fullscreen low-res world-render background canvas
+     `menuBgCanvas` (driven by menubg.js; if it fails, the CSS gradient behind
+     it simply shows through); info block: `entryCharName` (当前人物),
+     `entryRoomName` (当前房间 — if the player ever created it, prefix ★ and
+     apply the gold class `.room-own`), `entryRoomStatus` (exactly one of
+     「查询中…」/「在线 n 人」/「不在线·有存档」/「不在线」/「未连接服务器」);
+     three buttons: `enterWorldBtn`「进入世界」, `charPageBtn`「人物设定」,
+     `roomPageBtn`「房间设定」. **No list of any kind on this page.**
+  2. **`charShowPage`** 人物展示页 — `charShowPreview` canvas (the existing
+     drawAvatar, enlarged) + `charShowName`; buttons `charEditBtn`「编辑人物」,
+     `charSwitchBtn`「更换人物」, `charShowBackBtn`「返回」. Shows the name only —
+     no detail dump.
+  3. **`charSelectPage`** 人物选择页 — vertical list `charSelectList` (one row
+     per character: name + buttons 「使用」「编辑」); `newCharBtn`「建立新人物」,
+     `randomCharBtn`「随机建立」(creates a random-named, random-skinned character,
+     saves + activates it), `charSelectBackBtn`「返回」.
+  4. **`charEditorPage`** 人物设计页 — `charNameInput` (16-char cap enforced in
+     JS); body list `bodyList` (8 selectable entries labeled from `BODIES`,
+     selected one highlighted); THREE swatch groups: `topSwatches` 上衣
+     (8 PALETTE colors), `pantsSwatches` 裤子 (8 PALETTE colors), `skinSwatches`
+     肤色 (6 SKIN_TONES); live preview canvas `charPreview`; buttons
+     `saveUseCharBtn`「保存并使用」, `randomizeCharBtn`「随机设计」(randomizes
+     body + three colors in the editor, keeps the typed name),
+     `deleteCharBtn`「删除人物」(hidden when creating), `charEditorBackBtn`「返回」.
+     This round has exactly one species (human), so there is **NO category
+     selection page** — one option means zero selection steps; the accessory
+     system is parked, do not build any of it.
+  5. **`roomShowPage`** 房间展示页 — `roomShowName` (★ + `.room-own` gold rule as
+     above) + `roomShowStatus` (same status strings as `entryRoomStatus`);
+     buttons `roomEnterBtn`「进入房间」, `roomSwitchBtn`「更换房间」,
+     `roomShowBackBtn`「返回」. **NO 「管理房间」 button** — there is nothing to
+     manage yet, and we do not surface systems that don't exist.
+  6. **`roomSelectPage`** 房间选择页 — top: server mini-section (`serverInput`,
+     existing rules unchanged — persisted as `vc-server`, prefilled from saved >
+     `VC_DEFAULT_SERVER` > ''; `connStatus` lives here too; the section is
+     collapsed to a single summary line by default, tap to expand);
+     `roomNameInput` (placeholder 「房间名（留空 = 随机新房间）」, 1–16 **code
+     points** validated in JS — HTML maxlength counts UTF-16 units and must NOT
+     be used) + `findRoomBtn`「查找/进入」; then three list segments in fixed
+     order **当前 > 历史 > 公开**:
+     `currentRoomRow` (the `vc-lastroom` room with its status; hidden when no
+     last room) → `historyList` (one row per history entry:
+     ★?名字 · 状态 + buttons 「使用」「移除」) → `publicList` (one row per found
+     public room: 名字 · n人 + buttons 「使用」「隐藏」; excludes rooms already
+     present in history AND rooms in `vc-hidden`); `createRoomBtn`「建立新房间」
+     with `publicToggle` checkbox (「公开房间」, default checked); the existing
+     create-prompt ids (`createPrompt`, `createPromptText`, `confirmCreateBtn`)
+     are reused for the 「没有找到「X」」 confirm flow; `refreshBtn`;
+     `roomSelectBackBtn`「返回」.
+
+  Page navigation is wired INSIDE ui.js: entryPage → charShowPage / roomShowPage
+  via the two 设定 buttons; show pages → their select pages via the 更换 buttons;
+  `charSelectList` row 「编辑」 / `newCharBtn` → charEditorPage; every back
+  button walks exactly one level up (editor → charSelectPage, select pages →
+  their show page, show pages → entryPage). Character row 「使用」 activates the
+  character and returns to charShowPage; room row 「使用」 fires
+  `onUseRoom(name)` (enters the game — see the enter-world algorithm).
+  All user-controlled strings render via textContent ONLY; every Enter handler
+  keeps the IME guard (`isComposing || keyCode === 229`).
+
+  `hud` unchanged (crosshair `crosshair`, hotbar `hotbar`, room label
+  `roomLabel`, exit button `exitBtn` — top-right, label "退出", pointer-events
+  auto, touch target ≥40px; exiting now lands on **entryPage**),
+  `touchUI` unchanged (joystick base `joystick`, knob `joyKnob`, jump button
+  `jumpBtn`), toast container `toast` unchanged.
 - Single module script: `<script type="module" src="js/main.js"></script>`.
-- UI text in Chinese (menu title "VoxelCraft", go button "进入房间", create
-  button "创建这个房间", name placeholder "你的名字", room placeholder
-  "房间名（查找或创建）").
+- UI text in Chinese; menu title 「永远的山根乡」. The retired v2 ids must not
+  survive anywhere (HTML, CSS or JS): `profilePage`, `lobbyPage`, `charList`,
+  `charPicker`, `charEditor`, `charEditorTitle`, `shirtSwatches`, `saveCharBtn`,
+  `cancelCharBtn`, `activeCharLabel`, `switchCharBtn`, `goBtn`, `historyHeader`,
+  `roomList`.
 
 `public/style.css`:
 - Dark, clean menu centered; game fills viewport; `#gameCanvas { touch-action: none; }`
 - `body { margin:0; overflow:hidden; position:fixed; inset:0; }` (prevents iOS rubber-banding).
+- Six `.menu-page` sections, exactly one carrying the visible/active state.
+- `#menuBgCanvas`: fixed, full viewport, behind all menu content; the layer
+  behind it carries a CSS gradient so a failed/stopped menubg degrades silently.
+- `.room-own { color:#f1c40f }` (gold) kept; the ★ prefix is text content
+  (textContent), never CSS-generated.
+- Swatch rows (`.swatch` + selected state) now come in three groups
+  (top/pants/skin); `#bodyList` entries are buttons with a selected state.
+- ALL list-row action buttons (使用/编辑/移除/隐藏) and `bodyList` entries:
+  ≥40px touch targets; an action button's click/touch must not trigger any
+  row-level handler.
 - Safe-area: HUD/touch controls padded with `env(safe-area-inset-*)`.
 - Hotbar: bottom-center row of 8 slots (40–48px, larger touch targets on coarse
   pointers via `@media (pointer: coarse)`), selected slot highlighted.
 - `#touchUI` hidden by default; shown only when touch controls init.
 - Joystick: fixed bottom-left zone ~120px circle, knob 50px. Jump button bottom-right.
 
-`public/js/ui.js` exports (ui.js OWNS character storage —
-localStorage `vc-chars` = JSON array of `{name, skin:{s,p}}`, `vc-active` =
-active index; all localStorage reads/writes wrapped in try/catch; imports
-`PALETTE` from constants.js for swatches/previews; still no three.js):
+`public/js/ui.js` — ui.js OWNS all menu localStorage (every read/write wrapped in
+try/catch; imports `PALETTE`, `SKIN_TONES`, `BODIES` from constants.js for
+swatches/previews; **still no three.js in ui.js** — menubg.js is a separate
+module):
+- `vc-chars` = JSON array of `{name, skin:{b,t,p,k}}`. Legacy `{s,p}` entries
+  are **lazily migrated on read** with the shared skin rule (and written back in
+  the new shape on the next persist).
+- `vc-active` = active character index.
+- `vc-history` = `[{room, host: bool, t}]`, newest first, max 20, deduped by
+  `normRoomKey`. The stored field stays named `host` for compatibility, but its
+  MEANING is 「我创建过这个房间」 (own) — see gold semantics below.
+- `vc-server` = server spec (unchanged rules).
+- NEW `vc-lastroom` = display name of the last room entered.
+- NEW `vc-worlds` = local world saves (format in the 世界本地存档 section).
+- NEW `vc-hidden` = array of normalized public-room names the player hid via
+  「隐藏」; capped at 50, newest kept.
+- Random generators (internal): room names — adjective + place + 2-digit number
+  (e.g. 「迷雾森林42」, pools of ≥8 each, always ≤16 code points; existing
+  generator, unchanged); character names — NEW, two pools of ≥8 (e.g.
+  称号+名), result ≤16 chars; random skins — uniform over the valid v2 ranges.
+
 ```js
-export function initMenu({ onEnterRoom, onCreateRoom, onRefresh, onExit, onCharPicked });
-// Shows #menu. Page logic owned by ui.js:
-//  - profilePage first when no character exists (and editor opens straight away
-//    on a completely fresh install); otherwise lobbyPage with the saved active char.
-//  - Character cards: tap -> set active, call onCharPicked(char), show lobbyPage.
-//    switchCharBtn -> profilePage. Editor save -> persist + select + lobby.
-//    Deleting the last character returns to the empty profile state.
-//  - onEnterRoom(roomName, server)            — goBtn / Enter key / room-row pick
-//  - onCreateRoom(roomName, server, isPublic) — confirmCreateBtn inside createPrompt
-//  - onRefresh(server)                        — refresh button; also wires #exitBtn -> onExit()
-//  - Server input persists as 'vc-server' (initial: saved > VC_DEFAULT_SERVER > '').
-//  - Prefills roomNameInput from ?room=<URL-encoded name>.
-export function getActiveChar();             // {name, skin} | null
-export function recordHistory(room, isHost); // push/update 'vc-history' (see above);
-                                             // re-renders the history section
-export function showCreatePrompt(roomName);  // reveal createPrompt ("没有找到「xx」…");
-                                             // if roomName matches the one-shot generated
-                                             // random name, skip the prompt and call
-                                             // onCreateRoom directly (see above)
+// ---- NEW API consumed by main.js (signatures binding, verbatim) ----
+export function showPage(name);
+// name ∈ 'entry'|'charShow'|'charSelect'|'charEditor'|'roomShow'|'roomSelect'.
+export function initUi(handlers);
+// handlers = {
+//   onEnterWorld(),               // entryPage 进入世界 — zero-confirm chain (main.js)
+//   onUseRoom(name),              // room row 「使用」 / roomEnterBtn / findRoomBtn
+//   onCreateRoom(name, isPublic), // createRoomBtn + createPrompt confirm (explicit new world)
+//   onRefreshRooms(),             // refreshBtn (and roomSelectPage shown); main re-lists
+//   onServerChange(spec),         // serverInput committed (Enter); persisted as vc-server first
+// }
+// Loads all stores, builds the six pages' static content (swatches, bodyList),
+// wires ALL internal page navigation, prefills roomNameInput from ?room=,
+// shows entryPage. Empty-input random-name one-shot behavior is preserved:
+// generated name -> fill input -> onUseRoom; the matching showCreatePrompt
+// auto-creates once without prompting.
+export function setEntryInfo({charName, roomName, own, status});
+// entryPage info block. roomName null/'' renders '—'; own === true prefixes ★
+// and applies .room-own; status is rendered verbatim (main composes the
+// strings). textContent only.
+export function setRoomShowInfo({roomName, own, status});  // same rules, roomShowPage
+export function renderRoomSelect({current, history, found});
+// current: {name, own, status} | null  -> #currentRoomRow (hidden when null)
+// history: [{name, own, status}]       -> #historyList rows (使用/移除; ★+gold when own)
+// found:   [{name, players}]           -> #publicList rows '名字 · n人' (使用/隐藏).
+// ui.js itself filters `found` against history keys and vc-hidden; empty public
+// list -> placeholder '暂无公开房间，创建一个吧'. All strings via textContent.
+export function getActiveChar();        // {name, skin:{b,t,p,k}} | null — always migrated v2
+export function ensureCharacter();      // returns the active char; if none exists,
+                                        // silently creates a random one (random name +
+                                        // random valid v2 skin), persists + activates it
+export function getHistory();           // copy of vc-history: [{room, host: bool, t}]
+                                        // (main composes statuses / own flags from it)
+export function getLastRoom();          // display name | '' — from vc-lastroom
+export function setLastRoom(name);
+export function getWorldSave(room);     // {room, seed, edits, t} | null (normRoomKey lookup)
+export function putWorldSave(room, seed, edits); // enforces the 8-world LRU-by-t cap and
+                                        // the 60000-edit refusal (warn once, no-op)
+export function removeWorldSave(room);
+export function normRoomKey(raw);       // NFC + trim + collapse spaces + toLowerCase —
+                                        // the exact client mirror of the server rule
+export function bindExit(onExit);       // wires #exitBtn (click + touchstart
+                                        // stopPropagation, as today) -> onExit();
+                                        // successor of the old initMenu onExit wiring
+
+// ---- retained exports (signatures unchanged) ----
+export function recordHistory(room, isHost); // 'host' flag = 创建过, sticky once true;
+                                             // store update ONLY — no longer re-renders
+                                             // (rendering is main-driven via renderRoomSelect)
+export function showCreatePrompt(roomName);  // reveal createPrompt 「没有找到「xx」」;
+                                             // one-shot generated-name skip preserved
 export function hideCreatePrompt();          // hide it (also auto-hidden on input edit)
-export function showMenuError(msg);
-export function setConnStatus(text, ok);     // colored status line on lobbyPage
-export function renderRooms(rooms, onPick);  // rooms: [{room, players}] (live list) ->
-                                             // renders BOTH sections: history (merged with
-                                             // live data, gold for host===true, × delete)
-                                             // and 其他公开房间 (live rooms not in history).
-                                             // textContent only; empty public list ->
-                                             // "暂无公开房间，创建一个吧"; onPick(roomName)
-                                             // fires for rows in either section.
-export function setRoomsLoading();           // list placeholder "刷新中…"
-export function hideMenu();                  // hide menu, show #hud
+export function showMenuError(msg);          // shared #menuError line
+export function setConnStatus(text, ok);     // colored status line in the server section
+export function hideMenu();                  // hide menu, show #hud (main also stops menubg)
 export function setRoomLabel(name, playerCount);
 export function buildHotbar(icons);          // icons: array of 8 dataURL strings
 export function setHotbarSelection(i);       // highlight slot i (0..7)
 export function onHotbarTap(cb);             // cb(i) when a slot is clicked/tapped
 export function toast(msg);                  // transient message (3s)
-export function backToMenu(msg?);            // on disconnect/exit: show menu (lobbyPage)
+export function backToMenu(msg?);            // on disconnect/exit: show menu, now on
+                                             // **entryPage**; msg -> showMenuError
+// REMOVED (superseded — delete, do not keep dead exports): initMenu -> initUi;
+// renderRooms / setRoomsLoading / restoreRoomSections -> renderRoomSelect.
 ```
+
+Avatar preview `drawAvatar` (ui.js-internal, reused enlarged on charShowPage):
+updated for skin v2 — head fill `SKIN_TONES[k]`, torso `PALETTE[t]`, legs
+`PALETTE[p]`; widths scaled by `BODIES[b].w` (torso width further ×0.92 when
+`fem`), heights by `BODIES[b].h` — the same proportions renderer.addPlayer uses,
+so the preview matches the in-game avatar.
+
+**Gold semantics (binding, sitewide)**: ★/gold (`.room-own`) means
+「我创建过这个房间」 — sourced from the vc-history `host` flag (sticky once
+true). It must NOT be presented as 「我现在是房主」: hosting migrates while a
+room lives, and the UI never claims live host status.
+
+`public/js/menubg.js` (NEW, group B) — entry-page background renderer. Unlike
+ui.js it MAY import three.js and the terrain/world modules:
+```js
+export function startMenuBg(canvas, seed);   // -> { stop() }
+```
+- Renders the seeded terrain (its own World/terrain instance, small radius —
+  3–4 chunks is plenty) with a **slow orbiting camera**: a low-fi postcard of
+  the world, not a playable view.
+- **Low-res is binding**: `setPixelRatio(min(devicePixelRatio, 0.75))` or lower.
+  rAF is allowed here (menu only — the host.js no-timer rule does not apply);
+  `stop()` must cancel it.
+- `stop()` cancels the loop and disposes ALL GL resources (geometries,
+  materials, textures, renderer context).
+- **Total failure containment**: every exception (WebGL unavailable, context
+  loss, terrain error) is caught inside the module; on failure `startMenuBg`
+  logs one `[vc] menubg failed` line and returns `{stop(){}}`. It must never
+  throw into main.js — the CSS gradient fallback then shows through.
+- Lifecycle (main.js drives): start when the menu is shown (boot and
+  backToMenu; seed = the last room's world-save seed when available, else a
+  fixed default), stop on hideMenu/startGame.
 
 ### C. data
 `public/js/noise.js`:
@@ -399,10 +624,18 @@ export class Renderer {
   removeChunk(cx, cz)          // remove + dispose
   hasChunk(cx, cz)
   setHighlight(posOrNull)      // wireframe box (slightly inflated unit cube) at block pos
-  addPlayer(id, name, skin)    // boxy avatar with three parts: head 0.5^3 (fixed
-                           // skin tone #e0ac69), torso 0.6x0.6x0.3 = PALETTE[skin.s],
-                           // legs 0.6x0.6x0.3 = PALETTE[skin.p]; invalid/missing skin
-                           // -> {s: id % 8, p: (id + 3) % 8}; name sprite above head
+  addPlayer(id, name, skin)    // boxy avatar, three stacked boxes, skin v2.
+                           // First run the skin through the SHARED validation/
+                           // migration rule (v2 in-range -> as-is; legacy {s,p}
+                           // -> {b:1,t:s,p:p,k:1}; else {b:1,t:0,p:0,k:1}) —
+                           // the old id-derived color fallback is REMOVED.
+                           // Base boxes (w=h=1): legs 0.6x0.6x0.3 (y 0..0.6),
+                           // torso 0.6x0.6x0.3 (y 0.6..1.2), head 0.5^3
+                           // (y 1.2..1.7). Scale x/z by BODIES[b].w (torso x/z
+                           // further *0.92 when BODIES[b].fem), y sizes AND
+                           // stack positions by BODIES[b].h. Colors: head
+                           // SKIN_TONES[k], torso PALETTE[t], legs PALETTE[p].
+                           // Name sprite above head (y = 1.7*h + 0.35)
   updatePlayer(id, p, ry, rx)  // sets interpolation target (lerp ~10/s in render())
   removePlayer(id)
   render(eyePos, yaw, pitch)   // position camera, advance avatar interpolation, draw
@@ -491,9 +724,11 @@ export class HostRoom {
   members                  // Map<id, {name, skin, p, ry, helloed:boolean}>
   handlePeerIn(id)         // register pending member (helloed=false)
   handleMsg(from, d)       // dispatch by d.t:
-                           //  hello → store name + validated skin ({s,p} ints 0..7,
-                           //    else {s:0,p:0}), mark helloed, unicast `joined`
-                           //    (buildJoined(from)), cast `pjoin` to others
+                           //  hello → store name + skin run through the SHARED
+                           //    v2 validation/migration rule (v2 in-range ->
+                           //    as-is; legacy {s,p} -> {b:1,t:s,p:p,k:1}; else
+                           //    {b:1,t:0,p:0,k:1}), mark helloed, unicast
+                           //    `joined` (buildJoined(from)), cast `pjoin` to others
                            //  move  → update member p/ry, cast `pmove` (id=from)
                            //    to others except sender
                            //  block → world.applyEdit(x,y,z,id), cast `block`
@@ -508,77 +743,110 @@ export class HostRoom {
   buildJoined(forId)       // {t:'joined', room, seed: world.seed, id: forId,
                            //  players: [host self from playerRef] + other helloed
                            //  members, edits: [[x,y,z,id],...] from world.edits}
-  adoptMembers(map)        // migration seeding: Map<id,{name,p,ry,skin}> (all helloed)
+  adoptMembers(map)        // migration seeding: Map<id,{name,p,ry,skin}> (all
+                           // helloed); names AND skins re-run through the shared
+                           // clean rules (a poisoned skin inherited from a
+                           // malicious old host must not be re-broadcast)
 }
 ```
 `World` must expose `seed` (constructor stores it) so `buildJoined` can read it.
 
 `public/js/main.js` — orchestration. Two modes sharing one game session.
 
-**Lobby (menu = the connection layer, decoupled from the game):**
-- The player identity comes from `getActiveChar()` (set via `onCharPicked`);
-  `name` and `skin` below always mean the active character's.
-- On boot, after `initMenu`, auto-connect to the initial server value and call
-  `listRooms()`; `onRooms` → `renderRooms` (rows "房间名 · N人"; pick = enter that
-  room name). Connect success → `setConnStatus('已连接 · ' + (server || '本站'), true)`;
-  failure → `setConnStatus('未连接（检查服务器地址后点刷新）', false)` and an empty
-  list (NOT a thrown error — lobby failure must not block the menu).
-- `onRefresh(server)`: if `server` differs from `net.connectedTo` (or socket closed),
-  close the old socket and reconnect to the new address, then `listRooms()`.
-  Show `setRoomsLoading()` while in flight. Same reconnect-if-changed logic runs
-  before enter/create.
-- **Exit button** (`onExit`, in-game): tear down synchronously (stopGame +
-  backToMenu, no error message), then `net.close()`; afterwards auto-reconnect
-  the lobby and refresh the list. A host exiting this way triggers normal host
-  migration for the remaining members.
+**Menu (six pages; ui.js owns navigation and storage, main.js owns the
+connection and the flows):**
+- Identity = the active character (`getActiveChar()` / `ensureCharacter()`);
+  `name` and `skin` below always mean the active character's — `skin` always a
+  validated v2 object (run the shared rule on anything read from storage).
+- Boot: atlas icons → `buildHotbar`; `initUi({onEnterWorld, onUseRoom,
+  onCreateRoom, onRefreshRooms, onServerChange})`; `bindExit(handleExit)`;
+  start the entry background — `startMenuBg(#menuBgCanvas, seed)` with seed =
+  `getWorldSave(getLastRoom())?.seed`, else a fixed default; then lobby
+  auto-connect to the initial server value + `listRooms()`. Connect success →
+  `setConnStatus('已连接 · ' + (server || '本站'), true)`; failure →
+  `setConnStatus('未连接（检查服务器地址后点刷新）', false)` and an empty list
+  (NOT a thrown error — lobby failure must never block the menu).
+- **Menu info upkeep**: after boot, after every `rooms` reply, and after any
+  lastRoom / character / history change while the menu is visible, main
+  recomputes and pushes `setEntryInfo`, `setRoomShowInfo` and
+  `renderRoomSelect`. Status strings are composed by main: 「查询中…」 while a
+  list request is in flight; 「在线 n 人」 when the room appears in the live
+  list; otherwise 「不在线·有存档」 when `getWorldSave(room)` exists, else
+  「不在线」; 「未连接服务器」 when the lobby socket is down. `own` flags come
+  from `getHistory()`'s `host` field; history rows' statuses are composed the
+  same way.
+- `onRefreshRooms()` / `onServerChange(spec)`: reconnect-if-changed (if the
+  spec differs from `net.connectedTo` or the socket is closed, swap sockets and
+  redial), then `listRooms()`. While in flight show 「查询中…」 statuses. The
+  same reconnect-if-changed logic runs before every join/host.
+- **Exit button** (`bindExit` → handleExit, in-game): flush the pending world
+  save, then tear down synchronously (stopGame + backToMenu, no error message),
+  then `net.close()`; afterwards auto-reconnect the lobby, refresh the list and
+  restart menubg. A host exiting this way triggers normal host migration for
+  the remaining members.
 
-1. Boot: atlas icons → `buildHotbar`,
-   `initMenu({onEnterRoom,onCreateRoom,onRefresh,onExit,onCharPicked})`,
-   lobby auto-connect (above).
-2. **Enter room — find-first (`onEnterRoom(roomName, server)`)**: ensure connected →
-   `net.joinRoom(roomName)`. On `accepted` → member flow (3). On error `no-room` →
-   `showCreatePrompt(roomName)` (NOT a menuError — this is the expected "not found,
-   create it?" path; clear `busy` so the user can act). Other errors → showMenuError
-   (`full` → "房间已满", `bad-name` → "房间名需为 1–16 个字符").
-3. **Create (host mode, `onCreateRoom(roomName, server, isPublic)`)**: ensure
-   connected → `net.hostRoom({room: roomName, public: isPublic, meta: {n: name}})`
-   → on `onHosted`: pick `seed`, `world = new World(seed)`, `hostRoom = new
-   HostRoom(...)`, `startGame(...)` as before. On error `taken` (someone created
-   it in between): fall back to `net.joinRoom(roomName)` automatically.
-4. **Member flow**: on `onAccepted`: `net.sendToHost({t:'hello', name, skin})`;
+1. **onEnterWorld / onUseRoom**: implement the 「Enter-world algorithm」 section
+   verbatim — they share the existing find-first machinery (`busy`,
+   `pendingAction`/`pendingRoom`, `taken`→join fallback). The `no-room` branch
+   now forks: (a) world save exists → host with the SAVED seed/edits (see 2);
+   (b) no save + flow is onEnterWorld → create directly (same name, fresh
+   world, public per `publicToggle` default true); (c) no save + flow is
+   onUseRoom/findRoomBtn → `showCreatePrompt(name)` (NOT a menuError; clear
+   `busy` so the user can act). Other errors → showMenuError (`full` →
+   "房间已满", `bad-name` → "房间名需为 1–16 个字符").
+2. **Create (host mode, `onCreateRoom(name, isPublic)` and the save-rebuild
+   path)**: ensure connected → `net.hostRoom({room, public: isPublic, meta:
+   {n: name}})` → on `onHosted`: seed/edits come from a pending world-save
+   rebuild when one was staged (`{seed, edits}` from `getWorldSave`), else a
+   fresh random seed and no edits; `world = new World(seed)` (+ apply staged
+   edits via `world.applyEdit`), `hostRoom = new HostRoom(...)`,
+   `startGame(...)`. On error `taken` (lost the create race): fall back to
+   `net.joinRoom(room)` automatically — staged save edits are discarded (the
+   live room wins). `onCreateRoom` itself NEVER stages a save (建立新房间 = 全新世界).
+3. **Member flow**: on `onAccepted`: `net.sendToHost({t:'hello', name, skin})`;
    on `onMsg` `joined` → `startGame(msg)`. Track
    `remoteInfo: Map<id, {name, p, ry, skin}>` updated from `joined.players`,
-   `pjoin`, `pmove`; pass skin through to `renderer.addPlayer(id, name, skin)`.
-5. **History recording**: right after a session starts (both modes), call
-   `recordHistory(roomCode, mode === 'host')`.
-6. **Reply deadlines (anti-wedge)**: every lobby request that sets `busy`/awaits a
-   relay reply arms a deadline that, on expiry, `net.close()`s (recovering via the
-   normal `onClose` path) — not just `join`. Specifically: `host` (createRoom) and
-   the lobby `list` refresh get the same ~10s deadline `join` already has, cleared
-   on `hosted`/`rooms` respectively. A half-open socket whose frame was silently
+   `pjoin`, `pmove` — every inbound skin run through the shared v2 rule before
+   it reaches `renderer.addPlayer(id, name, skin)`.
+4. **Session start bookkeeping** (both modes, right after startGame):
+   `setLastRoom(roomCode)`, `recordHistory(roomCode, mode === 'host')`, initial
+   `putWorldSave(roomCode, seed, edits)`, stop menubg.
+5. **World-save upkeep** (both modes): every world mutation (own setBlock,
+   member-applied `block`, host-applied member edits, `resync` merge) schedules
+   a debounced 2 s `putWorldSave`; flushed synchronously in stopGame/exit/
+   disconnect. Serialization mirrors `buildJoined`.
+6. **Reply deadlines (anti-wedge)**: every lobby request that sets `busy`/awaits
+   a relay reply arms a deadline that, on expiry, `net.close()`s (recovering via
+   the normal `onClose` path) — not just `join`. `host` and the lobby `list`
+   refresh get the same ~10s deadline `join` already has, cleared on
+   `hosted`/`rooms` respectively. A half-open socket whose frame was silently
    dropped must never leave the menu dead for minutes.
-7. **Touch session reset**: `initTouchControls` returns `{ tick, reset }`; `stopGame`
-   calls `reset()` to clear all per-touch tracking (joystick anchor, look touches,
-   jump ids, move input) so a finger held across exit cannot drive or mis-trigger
-   (ghost break / joystick drift) the next session.
-5. Game loop unchanged, except move sending: ≤12 Hz throttle lives in main;
+7. **Touch session reset**: `initTouchControls` returns `{ tick, reset }`;
+   `stopGame` calls `reset()` to clear all per-touch tracking (joystick anchor,
+   look touches, jump ids, move input) so a finger held across exit cannot
+   drive or mis-trigger (ghost break / joystick drift) the next session.
+8. Game loop unchanged, except move sending: ≤12 Hz throttle lives in main;
    host mode → `hostRoom.castOwnMove(...)`, member mode → `sendToHost({t:'move',...})`.
-6. Block interaction unchanged, except: host mode → `world.setBlock` +
+9. Block interaction unchanged, except: host mode → `world.setBlock` +
    `hostRoom.castOwnBlock`; member mode → `world.setBlock` + `sendToHost({t:'block',…})`.
-7. **Migration**: `onPromote` → if no world, `net.close()` (accepted edge); else
-   become host: `hostRoom = new HostRoom(...)`; `adoptMembers` from `remoteInfo`
-   filtered to `peers`; remove `oldHostId` (renderer + remoteInfo); rewire callbacks;
-   toast "你已接任房主"; log `[vc] promoted to host`.
-   `onNewHost` → remove `oldHostId` avatar/info, toast "<旧名> 离开，<新名> 接任房主".
-8. Disconnect (`onClose`): stop loop, then `backToMenu('连接已断开')` for an
-   unexpected close while playing, or `backToMenu()` (no message) when the user
-   pressed the exit button (track a `leaving` flag set by `onExit`). Either way,
-   afterwards auto-reconnect the lobby and refresh the room list.
-9. **Wake lock**: while hosting on a touch device, request
-   `navigator.wakeLock?.request('screen')`; re-acquire on `visibilitychange` →
-   visible; release on stopGame. Wrap in try/catch (unsupported browsers).
-10. `setHotbarSelection` sync + resize handling — as v1.
-11. Keep `window.__vc` debug handle; add `hostRoom`, `mode` ('host'|'member'),
+   (Both paths also schedule the debounced world save — point 5.)
+10. **Migration**: `onPromote` → if no world, `net.close()` (accepted edge); else
+    become host: `hostRoom = new HostRoom(...)`; `adoptMembers` from `remoteInfo`
+    filtered to `peers`; remove `oldHostId` (renderer + remoteInfo); rewire
+    callbacks; cast `resync`; toast "你已接任房主"; log `[vc] promoted to host`.
+    `onNewHost` → remove `oldHostId` avatar/info, re-hello,
+    toast "<旧名> 离开，<新名> 接任房主". (Unchanged from v2.)
+11. Disconnect (`onClose`): flush the world save, stop the loop, then
+    `backToMenu('连接已断开')` for an unexpected close while playing, or
+    `backToMenu()` (no message) when the user pressed the exit button (the
+    `leaving` flag). Either way: afterwards auto-reconnect the lobby, refresh
+    the room list, refresh the menu info (point 「Menu info upkeep」) and
+    restart menubg — backToMenu lands on **entryPage**.
+12. **Wake lock**: while hosting on a touch device, request
+    `navigator.wakeLock?.request('screen')`; re-acquire on `visibilitychange` →
+    visible; release on stopGame. Wrap in try/catch (unsupported browsers).
+13. `setHotbarSelection` sync + resize handling — as before.
+14. Keep `window.__vc` debug handle; add `hostRoom`, `mode` ('host'|'member'),
     and `remoteInfo` getters.
 
 ## Performance budgets
@@ -586,3 +854,6 @@ export class HostRoom {
 - ≤ 2 chunk generations + ≤ 2 mesh rebuilds per frame after initial load.
 - Dispose geometries on chunk unload. One material for all chunks.
 - No per-frame allocations in hot paths where easily avoidable.
+- menubg: pixelRatio ≤ 0.75, terrain radius 3–4 chunks, generated once at start
+  (no per-frame chunk work); always stopped (loop cancelled, GL disposed)
+  while a game session runs.

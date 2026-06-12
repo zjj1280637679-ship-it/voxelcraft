@@ -182,14 +182,14 @@ ws.on('message', (data) => {
   switch (msg.t) {
     case 'accepted':
       log(`accepted id=${msg.id} hostId=${msg.hostId} -> 发送 hello`);
-      sendToHost({ t: 'hello', name: '场景搬运工', skin: { s: 3, p: 6 } });
+      sendToHost({ t: 'hello', name: '场景搬运工', skin: { b: 3, t: 3, p: 6, k: 2 } });
       break;
     case 'newhost':
       log(`房主迁移 -> 新房主 #${msg.hostId}`);
       // Our hello (or in-flight blocks) may have died with the old host;
       // re-hello is idempotent per DESIGN.md. Unconfirmed blocks are healed by
       // the new host's resync, or reported by the idle watchdog.
-      sendToHost({ t: 'hello', name: '场景搬运工', skin: { s: 3, p: 6 } });
+      sendToHost({ t: 'hello', name: '场景搬运工', skin: { b: 3, t: 3, p: 6, k: 2 } });
       break;
     case 'promote':
       log('被提升为房主 —— 本工具无世界状态，无法当房主，断开以让中继提升下一位成员');

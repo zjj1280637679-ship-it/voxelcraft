@@ -1,13 +1,16 @@
-// main.js — orchestrator (DESIGN.md §F, v2). Boots UI + renderer, drives the
-// relay client in host or member mode, runs the budgeted game loop, handles
-// block interaction and host migration.
+// main.js — orchestrator (DESIGN.md §F, v3 《永远的山根乡》). Boots the
+// six-page menu + renderer, runs the zero-confirmation enter-world chain,
+// drives the relay client in host or member mode, keeps the local world save
+// fresh, runs the budgeted game loop, handles block interaction and host
+// migration.
 
-import { CHUNK, HEIGHT, BLOCK, HOTBAR, PLAYER, PALETTE, chunkKey } from './constants.js';
+import { CHUNK, HEIGHT, BLOCK, HOTBAR, PLAYER, chunkKey } from './constants.js';
 import {
-  initMenu, getActiveChar, showCreatePrompt, hideCreatePrompt, showMenuError,
-  setConnStatus, renderRooms, setRoomsLoading, restoreRoomSections, hideMenu,
-  setRoomLabel, buildHotbar, setHotbarSelection, onHotbarTap, toast, backToMenu,
-  recordHistory,
+  initUi, bindExit, getActiveChar, ensureCharacter, getHistory, getLastRoom,
+  setLastRoom, getWorldSave, putWorldSave, normRoomKey, setEntryInfo,
+  setRoomShowInfo, renderRoomSelect, recordHistory, showCreatePrompt,
+  hideCreatePrompt, showMenuError, setConnStatus, hideMenu, setRoomLabel,
+  buildHotbar, setHotbarSelection, onHotbarTap, toast, backToMenu,
 } from './ui.js';
 import { World } from './world.js';
 import { Renderer } from './renderer.js';
@@ -16,6 +19,7 @@ import { initDesktopControls } from './controls-desktop.js';
 import { isTouchDevice, initTouchControls } from './controls-touch.js';
 import { RelayNet } from './network.js';
 import { HostRoom } from './host.js';
+import { startMenuBg } from './menubg.js';
 
 const canvas = document.getElementById('gameCanvas');
 const renderer = new Renderer(canvas);
@@ -33,9 +37,11 @@ let player = null;
 let roomCode = '';           // the room's display name
 let myId = -1;
 let myName = '玩家';          // active character (ui.js owns storage/selection)
-let mySkin = { s: 0, p: 0 }; // always a validated {s,p} pair
+let mySkin = { b: 1, t: 0, p: 0, k: 1 }; // always a validated v2 skin
 let pendingAction = null;    // 'join' | 'host' — lobby request awaiting a relay reply
 let pendingRoom = '';        // room name of that request (find-first / taken-fallback)
+let enterFlow = null;        // 'enter' | 'use' | 'create' — which UX started the chain
+let stagedSave = null;       // {seed, edits} staged for a world-save rebuild host
 let mode = null;             // 'host' | 'member' | null
 let hostRoom = null;         // HostRoom instance while mode === 'host'
 let currentHostId = -1;      // member mode: relay id of the current host
@@ -47,7 +53,12 @@ let lastMoveSent = 0;
 let replyTimer = null;       // deadline for any awaited relay reply (join/host/list)
 let joinTimedOut = false;    // a join/host deadline fired: onClose shows a timeout message
 let lobbyTimer = null;       // deadline between listRooms() and the relay's `rooms`
+let listInFlight = false;    // between listRooms() and `rooms` — statuses show 查询中…
+let lastRoomsList = [];      // latest `rooms` reply, mapped to [{room, players}]
+let worldSaveTimer = null;   // debounced (2 s) local world save (main may use timers)
+let menuBg = null;           // running menubg handle ({stop}) | null
 const MOVE_INTERVAL = 1000 / 12; // outbound move throttle (~12 Hz), lives here
+const MENUBG_DEFAULT_SEED = 1337;
 
 // id -> {name, p:[x,y,z], ry, skin} for every remote player. Powers the room
 // label, leave toasts and — critically — host migration (adoptMembers seed).
@@ -80,25 +91,84 @@ const playerHandle = {
   lookDir() { return player ? player.lookDir() : { x: 0, y: 0, z: -1 }; },
 };
 
+// ---- skin protocol v2 (the SHARED validation/migration rule) ----
+// Implemented identically in host.js, here (member side + storage reads) and
+// the tools bots. Checked in this order:
+//   1. v2 shape {b,t,p,k} all integers in range -> copy as-is (drop extras);
+//   2. legacy {s,p} integers 0..7 -> migrate {b:1, t:s, p:p, k:1};
+//   3. anything else -> default {b:1, t:0, p:0, k:1}.
+// Ranges per DESIGN: b 0..7 (BODIES), t/p 0..7 (PALETTE), k 0..5 (SKIN_TONES).
+function cleanSkin(s) {
+  if (s && typeof s === 'object') {
+    if (
+      Number.isInteger(s.b) && s.b >= 0 && s.b <= 7 &&
+      Number.isInteger(s.t) && s.t >= 0 && s.t <= 7 &&
+      Number.isInteger(s.p) && s.p >= 0 && s.p <= 7 &&
+      Number.isInteger(s.k) && s.k >= 0 && s.k <= 5
+    ) {
+      return { b: s.b, t: s.t, p: s.p, k: s.k };
+    }
+    if (
+      Number.isInteger(s.s) && s.s >= 0 && s.s <= 7 &&
+      Number.isInteger(s.p) && s.p >= 0 && s.p <= 7
+    ) {
+      return { b: 1, t: s.s, p: s.p, k: 1 };
+    }
+  }
+  return { b: 1, t: 0, p: 0, k: 1 };
+}
+
+// Highest legitimate block id (HOTBAR places 1..MAX, break sends 0/AIR).
+const MAX_BLOCK_ID = Math.max(...Object.values(BLOCK));
+
+// Active character (ui.js owns the storage; this is our session copy used for
+// hello payloads, hosting meta and HostRoom identity).
+function setActiveChar(ch) {
+  if (!ch || typeof ch !== 'object') return;
+  if (typeof ch.name === 'string' && ch.name.trim()) {
+    myName = ch.name.trim().slice(0, 16);
+  }
+  mySkin = cleanSkin(ch.skin);
+}
+
+// Random Chinese room name for the no-last-room enter path (mirrors the ui.js
+// generator: adjective + place + 2-digit number, always <= 16 code points).
+const RAND_ADJ = ['迷雾', '晨曦', '黄昏', '星空', '翡翠', '琥珀', '风暴', '宁静', '炽热', '苍翠'];
+const RAND_PLACE = ['森林', '山谷', '海岸', '平原', '洞穴', '群岛', '高原', '绿洲', '峡谷', '雪原'];
+function randomRoomName() {
+  const a = RAND_ADJ[(Math.random() * RAND_ADJ.length) | 0];
+  const p = RAND_PLACE[(Math.random() * RAND_PLACE.length) | 0];
+  return a + p + (10 + ((Math.random() * 90) | 0)); // 10..99: always 2 digits
+}
+
 // ---- boot ----
 const icons = HOTBAR.map((id) => renderer.atlas.blockIcon(id));
 buildHotbar(icons);
 setHotbarSelection(slot);
 onHotbarTap(selectSlot);
-initMenu({
-  onEnterRoom: enterRoom,
-  onCreateRoom: createRoom,
-  onRefresh: refreshLobby,
-  onExit: handleExit,
-  onCharPicked: setActiveChar,
+initUi({
+  onEnterWorld,
+  onUseRoom,
+  onCreateRoom,
+  onRefreshRooms,
+  onServerChange,
 });
-// Adopt the saved active character (null on a fresh install — ui.js keeps the
-// player on the profile page until one exists, and onCharPicked updates us).
+bindExit(handleExit);
+// Adopt the saved active character (null on a fresh install — the enter-world
+// chain runs ensureCharacter() and fills the gap silently).
 setActiveChar(getActiveChar());
+startBg();
+refreshMenuInfo();
 // Lobby auto-connect: list public rooms for the initial server value (which
 // ui.js just prefilled into #serverInput). Failure only colors the status
 // line — it must never block the menu.
 refreshLobby(currentServerSpec());
+// Character/history edits happen inside ui.js without a dedicated callback;
+// a cheap deferred recompute after any menu interaction keeps the entry/show
+// info blocks and list statuses fresh (runs after ui.js handlers).
+document.getElementById('menu')?.addEventListener('click', () => {
+  if (!playing) setTimeout(refreshMenuInfo, 0);
+});
 window.addEventListener('resize', () => renderer.resize());
 window.addEventListener('orientationchange', () => renderer.resize());
 document.addEventListener('visibilitychange', () => {
@@ -115,6 +185,23 @@ function selectSlot(i) {
   setHotbarSelection(i);
 }
 
+// ---- menu background (menubg.js drives its own loop; main owns lifecycle) ----
+function startBg() {
+  if (menuBg) return;
+  const cv = document.getElementById('menuBgCanvas');
+  if (!cv) return;
+  const last = getLastRoom();
+  const save = last ? getWorldSave(last) : null;
+  const seed = save && Number.isFinite(save.seed) ? save.seed : MENUBG_DEFAULT_SEED;
+  menuBg = startMenuBg(cv, seed); // never throws (contract); no-op handle on failure
+}
+
+function stopBg() {
+  if (!menuBg) return;
+  try { menuBg.stop(); } catch (err) { /* defensive — stop() must not throw */ }
+  menuBg = null;
+}
+
 // ---- lobby (menu = connection layer, decoupled from the game) ----
 function currentServerSpec() {
   const el = document.getElementById('serverInput');
@@ -126,29 +213,48 @@ function serverLabel(server) {
   return s || '本站';
 }
 
-// Highest legitimate block id (HOTBAR places 1..MAX, break sends 0/AIR).
-const MAX_BLOCK_ID = Math.max(...Object.values(BLOCK));
-
-// A skin from storage or the network must be {s,p} PALETTE indices.
-function validSkin(s) {
-  return !!s && typeof s === 'object' &&
-    Number.isInteger(s.s) && s.s >= 0 && s.s < PALETTE.length &&
-    Number.isInteger(s.p) && s.p >= 0 && s.p < PALETTE.length;
+// publicToggle drives the silent host paths too (default true when absent).
+function defaultPublic() {
+  const el = document.getElementById('publicToggle');
+  return el ? !!el.checked : true;
 }
 
-// Same collapse rule the host applies: invalid skin -> default {s:0, p:0}.
-function cleanSkin(s) {
-  return validSkin(s) ? { s: s.s, p: s.p } : { s: 0, p: 0 };
-}
-
-// Active character (ui.js owns the storage; this is our session copy used for
-// hello payloads, hosting meta and HostRoom identity).
-function setActiveChar(ch) {
-  if (!ch || typeof ch !== 'object') return;
-  if (typeof ch.name === 'string' && ch.name.trim()) {
-    myName = ch.name.trim().slice(0, 16);
+// ---- menu info upkeep (DESIGN §F「Menu info upkeep」) ----
+// Recomputed after boot, every `rooms` reply, and any lastRoom / character /
+// history change while the menu is visible. Status strings are composed here.
+function statusFor(name) {
+  if (listInFlight) return '查询中…';
+  if (!connected) return '未连接服务器';
+  const key = normRoomKey(name);
+  for (const r of lastRoomsList) {
+    if (normRoomKey(r.room) === key) return '在线 ' + r.players + ' 人';
   }
-  mySkin = cleanSkin(ch.skin);
+  return getWorldSave(name) ? '不在线·有存档' : '不在线';
+}
+
+function refreshMenuInfo() {
+  if (playing) return;
+  const ch = getActiveChar();
+  const last = getLastRoom();
+  const history = getHistory();
+  const ownKeys = new Set();
+  for (const e of history) {
+    if (e.host === true) ownKeys.add(normRoomKey(e.room));
+  }
+  const own = last ? ownKeys.has(normRoomKey(last)) : false;
+  const status = last ? statusFor(last) : (connected ? '' : '未连接服务器');
+  setEntryInfo({ charName: ch ? ch.name : '—', roomName: last, own, status });
+  setRoomShowInfo({ roomName: last, own, status });
+  renderRoomSelect({
+    current: last ? { name: last, own, status } : null,
+    history: history.map((e) => ({
+      name: e.room,
+      own: e.host === true,
+      status: statusFor(e.room),
+    })),
+    // ui.js filters found against history keys and vc-hidden itself.
+    found: lastRoomsList.map((r) => ({ name: r.room, players: r.players })),
+  });
 }
 
 // Connect (or reconnect, if the server address changed or the socket died)
@@ -156,7 +262,8 @@ function setActiveChar(ch) {
 async function refreshLobby(server) {
   if (busy || playing) return;
   const seq = ++lobbySeq;
-  setRoomsLoading();
+  listInFlight = true;
+  refreshMenuInfo(); // 查询中… while the request is in flight
   try {
     await ensureConnected(server);
     if (seq !== lobbySeq || playing) return; // superseded by a newer action
@@ -166,15 +273,19 @@ async function refreshLobby(server) {
   } catch (err) {
     console.log('[vc] lobby connect failed:', err && err.message);
     if (seq !== lobbySeq || playing) return;
+    listInFlight = false;
+    lastRoomsList = [];
     setConnStatus('未连接（检查服务器地址后点刷新）', false);
-    renderRooms([], pickRoom);
+    refreshMenuInfo();
   }
 }
 
-// Click on a public-room row: enter that room name (find-first flow). The
-// server comes from the menu input; identity is the active character.
-function pickRoom(roomName) {
-  enterRoom(roomName, currentServerSpec());
+function onRefreshRooms() {
+  refreshLobby(currentServerSpec());
+}
+
+function onServerChange(spec) {
+  refreshLobby(spec); // reconnect-if-changed lives in ensureConnected
 }
 
 function handleExit() {
@@ -183,10 +294,11 @@ function handleExit() {
   console.log('[vc] exit button pressed — leaving room');
   // Tear down synchronously: if the connection is already silently dead, the
   // browser's close event can take seconds, and the exit button must not
-  // appear broken meanwhile. onClose then takes the non-playing branch and
-  // uses `leaving` to restore the lobby.
+  // appear broken meanwhile. stopGame flushes the pending world save first.
+  // onClose then takes the non-playing branch and uses `leaving` to restore
+  // the lobby.
   stopGame();
-  backToMenu();
+  returnToMenu();
   net.close();
   // The close event can lag for seconds; until it fires the socket is
   // CLOSING and _send drops frames silently. Mark the session disconnected
@@ -194,63 +306,109 @@ function handleExit() {
   connected = false;
 }
 
-// ---- enter / create (find-first flow, DESIGN steps 2–3) ----
-// Step 2: try joining the named room first. `no-room` is the expected
-// "doesn't exist yet" outcome and reveals the create prompt (see onError).
-async function enterRoom(roomName, server) {
+// backToMenu lands on entryPage (ui.js); main restarts menubg and the info.
+function returnToMenu(msg) {
+  backToMenu(msg);
+  startBg();
+  refreshMenuInfo();
+}
+
+// ---- enter world (zero-confirmation chain, DESIGN「Enter-world algorithm」) ----
+// entryPage 进入世界: ensureCharacter -> last room (join, falling back to a
+// world-save rebuild or a fresh same-name world) or a brand-new random room.
+function onEnterWorld() {
   if (busy || playing) return;
-  const room = String(roomName == null ? '' : roomName).trim();
+  setActiveChar(ensureCharacter()); // silently creates + activates if missing
+  const last = getLastRoom();
+  if (!last) {
+    // No last room: random Chinese name, brand-new public world, no prompts.
+    startHost(randomRoomName(), true, null, 'enter');
+    return;
+  }
+  startJoin(last, 'enter');
+}
+
+// room row 「使用」 / roomEnterBtn / findRoomBtn — same chain; the only
+// difference is the dead end: no room + no save -> showCreatePrompt.
+function onUseRoom(name) {
+  if (busy || playing) return;
+  const room = String(name == null ? '' : name).trim();
   if (!room) {
     showMenuError('请输入房间名');
     return;
   }
+  if ([...room].length > 16) {
+    showMenuError('房间名需为 1–16 个字符');
+    return;
+  }
+  setActiveChar(ensureCharacter());
+  startJoin(room, 'use');
+}
+
+// createRoomBtn / createPrompt confirm — explicitly a NEW world: never stages
+// a world save (a stale save must not hijack a deliberately fresh room).
+function onCreateRoom(name, isPublic) {
+  if (busy || playing) return;
+  let room = String(name == null ? '' : name).trim();
+  if (!room) room = randomRoomName();
+  if ([...room].length > 16) {
+    showMenuError('房间名需为 1–16 个字符');
+    return;
+  }
+  setActiveChar(ensureCharacter());
+  startHost(room, !!isPublic, null, 'create');
+}
+
+// Step 2 of the chain: try joining first. `no-room` forks in onError (save
+// rebuild / silent create / create prompt, depending on enterFlow).
+async function startJoin(room, flow) {
   busy = true;
   lobbySeq++; // supersede any in-flight lobby refresh
+  listInFlight = false;
   hideCreatePrompt();
-  setActiveChar(getActiveChar()); // pick up in-place edits of the active char
+  enterFlow = flow;
+  stagedSave = null;
   pendingAction = 'join';
   pendingRoom = room;
   try {
-    await ensureConnected(server);
-    setConnStatus('已连接 · ' + serverLabel(server), true);
+    await ensureConnected(currentServerSpec());
+    setConnStatus('已连接 · ' + serverLabel(currentServerSpec()), true);
     net.joinRoom(room);
     armReplyTimer();
   } catch (err) {
-    busy = false;
-    console.error('[vc] connect failed:', err);
-    setConnStatus('未连接（检查服务器地址后点刷新）', false);
-    showMenuError('无法连接服务器');
-    restoreRoomSections(); // clear a stale '刷新中…' from a superseded refresh
+    connectFail(err);
   }
 }
 
-// Step 3: create confirmed via the prompt. `taken` (lost the create race)
-// falls back to a plain join in onError.
-async function createRoom(roomName, server, isPublic) {
-  if (busy || playing) return;
-  const room = String(roomName == null ? '' : roomName).trim();
-  if (!room) {
-    showMenuError('请输入房间名');
-    return;
-  }
+// Host a room. saved = {seed, edits} when rebuilding from a local world save
+// (世界不消失), null for a fresh world. `taken` falls back to join in onError.
+async function startHost(room, isPublic, saved, flow) {
   busy = true;
   lobbySeq++; // supersede any in-flight lobby refresh
+  listInFlight = false;
   hideCreatePrompt();
-  setActiveChar(getActiveChar());
+  enterFlow = flow;
+  stagedSave = saved || null;
   pendingAction = 'host';
   pendingRoom = room;
   try {
-    await ensureConnected(server);
-    setConnStatus('已连接 · ' + serverLabel(server), true);
+    await ensureConnected(currentServerSpec());
+    setConnStatus('已连接 · ' + serverLabel(currentServerSpec()), true);
     net.hostRoom({ room, public: !!isPublic, meta: { n: myName.slice(0, 24) } });
     armReplyTimer();
   } catch (err) {
-    busy = false;
-    console.error('[vc] connect failed:', err);
-    setConnStatus('未连接（检查服务器地址后点刷新）', false);
-    showMenuError('无法连接服务器');
-    restoreRoomSections(); // clear a stale '刷新中…' from a superseded refresh
+    connectFail(err);
   }
+}
+
+function connectFail(err) {
+  busy = false;
+  pendingAction = null;
+  stagedSave = null;
+  console.error('[vc] connect failed:', err);
+  setConnStatus('未连接（检查服务器地址后点刷新）', false);
+  showMenuError('无法连接服务器');
+  refreshMenuInfo();
 }
 
 // Reply deadline (anti-wedge), shared by every busy lobby request that awaits a
@@ -279,7 +437,7 @@ function clearReplyTimer() {
 }
 
 // Lobby refresh deadline: a `list` whose frame was silently dropped (half-open
-// socket) would otherwise leave the lobby stuck on '刷新中…' forever. On expiry
+// socket) would otherwise leave the lobby stuck on 查询中… forever. On expiry
 // mark the session disconnected and color the status line; a future refresh
 // redials. Guarded by lobbySeq so a superseded refresh's timer is inert.
 function armLobbyTimer(seq) {
@@ -289,8 +447,10 @@ function armLobbyTimer(seq) {
     if (seq !== lobbySeq || playing) return; // superseded or in a game
     console.log('[vc] room list never arrived — marking disconnected');
     connected = false;
+    listInFlight = false;
+    lastRoomsList = [];
     setConnStatus('未连接（检查服务器地址后点刷新）', false);
-    renderRooms([], pickRoom);
+    refreshMenuInfo();
   }, 10000);
 }
 
@@ -301,7 +461,7 @@ function clearLobbyTimer() {
   }
 }
 
-// Relay error code -> user-facing message (DESIGN step 2 mapping).
+// Relay error code -> user-facing message.
 function errorText(code) {
   return code === 'no-room' ? '房间不存在'
     : code === 'full' ? '房间已满'
@@ -345,8 +505,19 @@ function wireNet(n) {
     pendingAction = null;
     mode = 'host';
     myId = id;
-    const seed = Math.floor(Math.random() * 2 ** 31);
-    world = new World(seed);
+    let seed;
+    let savedEdits = null;
+    if (stagedSave && Number.isFinite(stagedSave.seed)) {
+      // World-save rebuild: the room is reborn from {seed, edits} (世界不消失).
+      seed = Math.floor(stagedSave.seed);
+      savedEdits = stagedSave.edits;
+      console.log('[vc] rebuilding room from local save', room,
+        'seed', seed, Array.isArray(savedEdits) ? savedEdits.length : 0, 'edits');
+    } else {
+      seed = Math.floor(Math.random() * 2 ** 31);
+    }
+    stagedSave = null;
+    world = World.load(seed, savedEdits); // filters + applies edits via applyEdit
     hostRoom = new HostRoom({
       net: n, world, room, hostId: id, hostName: myName, hostSkin: mySkin,
       playerRef: playerHandle,
@@ -372,36 +543,74 @@ function wireNet(n) {
       return;
     }
     if (code === 'no-room' && pendingAction === 'join') {
-      // Expected find-first outcome, not an error: offer to create the room.
-      // busy must clear here or the menu wedges.
+      // Expected find-first outcome. Fork (DESIGN §F point 1):
+      //   (a) local world save -> host with the saved {seed, edits};
+      //   (b) no save, enter-world flow -> silent same-name fresh world;
+      //   (c) no save, use/find flow -> create prompt (busy must clear).
+      const room = pendingRoom;
+      if (enterFlow === 'create') {
+        // Double race: lost the create (`taken` -> join fallback) and the
+        // racing room died within the RTT. 建立新房间 = 全新世界 — a stale
+        // save must never hijack it, and the user already confirmed once,
+        // so never re-prompt: just re-issue a fresh host.
+        console.log('[vc] create race lost and room died — re-hosting fresh:', room);
+        pendingAction = 'host';
+        stagedSave = null;
+        n.hostRoom({ room, public: defaultPublic(), meta: { n: myName.slice(0, 24) } });
+        armReplyTimer();
+        return;
+      }
+      const save = getWorldSave(room);
+      if (save && Number.isFinite(save.seed)) {
+        console.log('[vc] room offline — rebuilding from local save:', room);
+        pendingAction = 'host';
+        stagedSave = { seed: save.seed, edits: Array.isArray(save.edits) ? save.edits : [] };
+        n.hostRoom({ room, public: defaultPublic(), meta: { n: myName.slice(0, 24) } });
+        armReplyTimer();
+        return;
+      }
+      if (enterFlow === 'enter') {
+        console.log('[vc] room not found — creating fresh world:', room);
+        pendingAction = 'host';
+        stagedSave = null;
+        n.hostRoom({ room, public: defaultPublic(), meta: { n: myName.slice(0, 24) } });
+        armReplyTimer();
+        return;
+      }
       busy = false;
+      pendingAction = null;
       showMenuError('');
-      restoreRoomSections(); // clear a stale '刷新中…' from a superseded refresh
-      showCreatePrompt(pendingRoom);
+      showCreatePrompt(room); // ui.js auto-creates once for a generated name
+      refreshMenuInfo();
       return;
     }
     if (code === 'taken' && pendingAction === 'host') {
-      // Lost the create race — the room exists now, so just join it.
+      // Lost the create race — the room exists now, so just join it. Staged
+      // save edits are discarded: the live room wins.
       console.log('[vc] room taken — joining instead:', pendingRoom);
       pendingAction = 'join';
+      stagedSave = null;
       n.joinRoom(pendingRoom);
       armReplyTimer();
       return;
     }
     busy = false;
+    pendingAction = null;
+    stagedSave = null;
     showMenuError(errorText(code));
-    restoreRoomSections(); // clear a stale '刷新中…' from a superseded refresh
+    refreshMenuInfo();
   };
 
   n.onRooms = (rooms) => {
     clearLobbyTimer();
+    listInFlight = false;
     if (playing) return;
     // Relay trust boundary: the server address is user-supplied, so list
     // entries can be anything — drop non-objects before dereferencing.
-    const mapped = rooms
+    lastRoomsList = rooms
       .filter((r) => r && typeof r === 'object')
-      .map((r) => ({ room: r.room, players: r.players }));
-    renderRooms(mapped, pickRoom);
+      .map((r) => ({ room: String(r.room ?? ''), players: Number(r.players) || 0 }));
+    refreshMenuInfo();
   };
 
   n.onPeerIn = (id) => {
@@ -434,14 +643,15 @@ function wireNet(n) {
     leaving = false;
     joinTimedOut = false;
     pendingAction = null;
+    stagedSave = null;
     clearReplyTimer();
     clearLobbyTimer();
+    listInFlight = false;
     console.log('[vc] ws closed');
     if (playing) {
-      stopGame();
+      stopGame(); // flushes the pending world save
       // Voluntary exit shows no error; an unexpected drop does.
-      if (wasLeaving) backToMenu();
-      else backToMenu('连接已断开');
+      returnToMenu(wasLeaving ? undefined : '连接已断开');
       // Bring the lobby back: reconnect to the same relay, refresh the list.
       refreshLobby(n.connectedTo);
     } else {
@@ -459,8 +669,8 @@ function wireNet(n) {
       // an idle lobby socket closing must not block the menu.
       if (wasBusy) {
         showMenuError(wasTimeout ? '加入超时，请重试' : '连接已断开');
-        restoreRoomSections(); // clear a stale '刷新中…' from a superseded refresh
       }
+      refreshMenuInfo();
     }
   };
 }
@@ -472,6 +682,12 @@ function hostOnMsg(d, from) {
   const before = hostRoom.members.get(from);
   const wasHelloed = !!(before && before.helloed);
   hostRoom.handleMsg(from, d);
+  if (d.t === 'block') {
+    // HostRoom applied a valid edit via world.applyEdit (the dirty pipeline
+    // remeshes the chunk in the loop) — keep the local world save fresh.
+    scheduleWorldSave();
+    return;
+  }
   const m = hostRoom.members.get(from);
   if (!m) return;
   if (d.t === 'hello' && !wasHelloed && m.helloed) {
@@ -487,8 +703,6 @@ function hostOnMsg(d, from) {
       renderer.updatePlayer(from, m.p, m.ry, Number.isFinite(d.rx) ? d.rx : 0);
     }
   }
-  // 'block' needs no mirror: HostRoom applied it via world.applyEdit and the
-  // dirty pipeline remeshes the chunk in the loop.
 }
 
 // A position from the network must be a [x,y,z] array of finite numbers.
@@ -515,8 +729,16 @@ function memberOnMsg(d) {
         console.error('[vc] malformed joined payload — ignored');
         return;
       }
+      // Same per-entry trust boundary as the 'resync' path (DESIGN: joined.edits
+      // gets the identical filter — integers, in-range y and id). A poisoned
+      // entry would otherwise enter world.edits and the initial putWorldSave,
+      // then be silently dropped on a later World.load rebuild (lost edits).
       d.edits = Array.isArray(d.edits)
-        ? d.edits.filter((e) => Array.isArray(e) && e.length === 4 && e.every(Number.isFinite))
+        ? d.edits.filter((e) =>
+            Array.isArray(e) && e.length === 4 &&
+            Number.isInteger(e[0]) && Number.isInteger(e[1]) &&
+            Number.isInteger(e[2]) && Number.isInteger(e[3]) &&
+            e[1] >= 0 && e[1] < HEIGHT && e[3] >= 0 && e[3] <= MAX_BLOCK_ID)
         : [];
       clearReplyTimer();
       busy = false;
@@ -556,6 +778,7 @@ function memberOnMsg(d) {
         d.y < 0 || d.y >= HEIGHT
       ) return;
       world.applyEdit(d.x, d.y, d.z, d.id);
+      scheduleWorldSave();
       break;
     case 'resync': {
       // Full edit-log snapshot from the new host after migration. Merge each
@@ -576,6 +799,7 @@ function memberOnMsg(d) {
         ) continue;
         world.applyEdit(e[0], e[1], e[2], e[3]);
       }
+      scheduleWorldSave();
       break;
     }
     default:
@@ -587,8 +811,8 @@ function memberOnMsg(d) {
 function addRemote(id, name, p, ry, skin) {
   if (!playing) return;
   // pjoin crosses the host trust boundary unvalidated: sanitize here (skin
-  // collapses to {s:0,p:0}, name capped at 16, ry must be finite — mirroring
-  // the host-side rules).
+  // through the shared v2 rule, name capped at 16, ry must be finite —
+  // mirroring the host-side rules).
   if (!validPos(p)) p = [8, 40, 8];
   name = String(name ?? id).slice(0, 16);
   ry = Number.isFinite(ry) ? ry : 0;
@@ -717,6 +941,29 @@ function releaseWakeLock() {
   }
 }
 
+// ---- local world save upkeep (DESIGN「世界本地存档」; host AND members) ----
+// Every world mutation schedules a save debounced 2 s (trailing edge kept:
+// continuous building still persists at least every ~2 s). The timer lives
+// here — the no-timer rule binds host.js only. Flushed synchronously on
+// stopGame / exit / disconnect.
+function scheduleWorldSave() {
+  if (!playing || !world) return;
+  if (worldSaveTimer !== null) return;
+  worldSaveTimer = setTimeout(() => {
+    worldSaveTimer = null;
+    flushWorldSave();
+  }, 2000);
+}
+
+function flushWorldSave() {
+  if (worldSaveTimer !== null) {
+    clearTimeout(worldSaveTimer);
+    worldSaveTimer = null;
+  }
+  if (!world || !roomCode) return;
+  putWorldSave(roomCode, world.seed, world.serializeEdits());
+}
+
 // ---- session lifecycle ----
 // msg: {room, id, seed, players, edits} — the member's `joined` payload, or a
 // host-built equivalent. In host mode `world` already exists (HostRoom holds it).
@@ -750,13 +997,14 @@ function startGame(msg) {
   player = new Player(world, { x: 8.5, y: world.surfaceHeight(8, 8) + 1, z: 8.5 });
 
   hideMenu();
+  stopBg(); // menubg never runs (loop + GL) behind a live game session
   setRoomLabel(roomCode, msg.players.length + 1);
   initControlsOnce();
 
   remoteInfo.clear();
   for (const p of msg.players) {
-    // Host trust boundary, same rules as pjoin: skin collapses, name capped,
-    // ry must be finite (NaN would poison the avatar transform forever).
+    // Host trust boundary, same rules as pjoin: skin through the shared v2
+    // rule, name capped, ry finite (NaN would poison the avatar transform).
     const skin = cleanSkin(p.skin);
     const name = String(p.name ?? p.id).slice(0, 16);
     const ry = Number.isFinite(p.ry) ? p.ry : 0;
@@ -769,13 +1017,18 @@ function startGame(msg) {
   lastTime = performance.now();
   lastMoveSent = 0;
   rafId = requestAnimationFrame(loop);
-  // 我的足迹: host=true only when this player created the room (sticky in ui.js).
+  // Session bookkeeping: last room + 足迹 (host = 创建过, sticky in ui.js) +
+  // the immediate initial world save (members save too — every player who
+  // entered the room can rebuild it later; that is the 「世界不消失」 point).
+  setLastRoom(roomCode);
   recordHistory(roomCode, mode === 'host');
+  putWorldSave(roomCode, world.seed, world.serializeEdits());
   if (mode === 'host' && isTouchDevice()) acquireWakeLock();
   console.log('[vc] joined room', roomCode, 'as player', myId, '(' + mode + ')');
 }
 
 function stopGame() {
+  flushWorldSave(); // synchronous, before the world is torn down
   playing = false;
   if (rafId !== null) {
     cancelAnimationFrame(rafId);
@@ -936,6 +1189,7 @@ function doBreak() {
   if (!hit || hit.y <= 0) return; // y=0 layer is unbreakable
   world.setBlock(hit.x, hit.y, hit.z, BLOCK.AIR);
   sendBlockEdit(hit.x, hit.y, hit.z, BLOCK.AIR);
+  scheduleWorldSave();
 }
 
 function doPlace() {
@@ -951,6 +1205,7 @@ function doPlace() {
   const id = HOTBAR[slot];
   world.setBlock(tx, ty, tz, id);
   sendBlockEdit(tx, ty, tz, id);
+  scheduleWorldSave();
 }
 
 function blockIntersectsPlayer(bx, by, bz) {
@@ -972,6 +1227,13 @@ window.__vc = {
   get hostRoom() { return hostRoom; },
   get remoteInfo() { return remoteInfo; },
   get net() { return net; },
+  // Local world-save entry: live session snapshot in the vc-worlds format.
+  get worldSave() {
+    return world && roomCode
+      ? { room: roomCode, seed: world.seed, edits: world.serializeEdits() }
+      : null;
+  },
+  flushWorldSave,
   // v1 compat: Map<id, name>
   get remotePlayers() {
     const m = new Map();

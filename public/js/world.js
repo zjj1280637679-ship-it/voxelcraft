@@ -5,6 +5,25 @@ import { CHUNK, HEIGHT, BLOCK, chunkIndex, chunkKey, blockKey } from './constant
 import { makeGenerator } from './terrain.js';
 
 export class World {
+  // Build a world preloaded with a saved edit set (local world-save rebuild:
+  // 世界=种子+修改集). Entries are filtered like network edits — the save
+  // comes from localStorage and is not trusted blindly.
+  static load(seed, edits) {
+    const w = new World(seed);
+    if (Array.isArray(edits)) {
+      for (const e of edits) {
+        if (
+          !Array.isArray(e) || e.length !== 4 ||
+          !Number.isInteger(e[0]) || !Number.isInteger(e[1]) ||
+          !Number.isInteger(e[2]) || !Number.isInteger(e[3]) ||
+          e[3] < 0 || e[3] > 255
+        ) continue;
+        w.applyEdit(e[0], e[1], e[2], e[3]);
+      }
+    }
+    return w;
+  }
+
   constructor(seed) {
     this.seed = seed;
     this.chunks = new Map(); // Map<chunkKey, Uint8Array>
@@ -125,6 +144,18 @@ export class World {
       this._rings.set(radius, ring);
     }
     return ring;
+  }
+
+  // Serialize the edit log to [[x,y,z,id],...] — the exact format used by
+  // `joined`/`resync` payloads (host.js buildJoined) and local world saves.
+  serializeEdits() {
+    const out = [];
+    for (const [key, id] of this.edits) {
+      const c1 = key.indexOf(',');
+      const c2 = key.indexOf(',', c1 + 1);
+      out.push([+key.slice(0, c1), +key.slice(c1 + 1, c2), +key.slice(c2 + 1), id]);
+    }
+    return out;
   }
 
   // Top-most non-air y in the column (-1 if the column is entirely air).

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-  <title>VoxelCraft</title>
+  <title>永远的山根乡</title>
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="style.css">
 </head>
@@ -25,78 +25,145 @@
   <div id="toast"></div>
 
   <div id="menu">
-    <div class="menu-panel">
-      <h1 class="menu-title">VoxelCraft</h1>
-      <p class="menu-sub">多人在线方块世界</p>
+    <!-- Low-res world postcard (menubg.js). If it never paints, the CSS
+         gradient on #menu simply shows through. -->
+    <canvas id="menuBgCanvas"></canvas>
 
-      <!-- Page 1: characters (profile) -->
-      <section id="profilePage" class="menu-page">
-        <div id="charPicker">
-          <p class="page-heading">选择人物</p>
-          <div id="charList"></div>
-          <button id="newCharBtn" class="btn btn-primary" type="button">新建人物</button>
-        </div>
+    <div class="menu-shell">
 
-        <div id="charEditor">
-          <p id="charEditorTitle" class="page-heading"></p>
-          <input id="charNameInput" type="text" placeholder="你的名字" maxlength="16" autocomplete="off" spellcheck="false">
-          <p class="swatch-label">上衣颜色</p>
-          <div id="shirtSwatches" class="swatch-row"></div>
-          <p class="swatch-label">裤子颜色</p>
-          <div id="pantsSwatches" class="swatch-row"></div>
-          <div class="preview-wrap"><canvas id="charPreview" width="96" height="144"></canvas></div>
-          <div class="editor-actions">
-            <button id="saveCharBtn" class="btn btn-primary" type="button">保存</button>
-            <button id="cancelCharBtn" class="btn" type="button">取消</button>
+      <!-- Page 1: entry (show page — subject + entry buttons, NO lists) -->
+      <section id="entryPage" class="menu-page active">
+        <h1 class="menu-title">永远的山根乡</h1>
+        <p class="menu-sub">回到你的方块世界</p>
+        <div class="entry-info">
+          <div class="entry-row">
+            <span class="entry-label">当前人物</span>
+            <span id="entryCharName" class="entry-value">—</span>
           </div>
-          <button id="deleteCharBtn" class="btn btn-danger hidden" type="button">删除人物</button>
+          <div class="entry-row">
+            <span class="entry-label">当前房间</span>
+            <span id="entryRoomName" class="entry-value">—</span>
+          </div>
+          <div class="entry-row">
+            <span class="entry-label">状态</span>
+            <span id="entryRoomStatus" class="entry-value entry-status">查询中…</span>
+          </div>
+        </div>
+        <button id="enterWorldBtn" class="btn btn-primary btn-big" type="button">进入世界</button>
+        <div class="entry-actions">
+          <button id="charPageBtn" class="btn" type="button">人物设定</button>
+          <button id="roomPageBtn" class="btn" type="button">房间设定</button>
         </div>
       </section>
 
-      <!-- Page 2: lobby (rooms) -->
-      <section id="lobbyPage" class="menu-page">
-        <div class="conn-block">
-          <p id="connStatus"></p>
+      <!-- Page 2: character show -->
+      <section id="charShowPage" class="menu-page">
+        <p class="page-heading">人物</p>
+        <div class="preview-wrap">
+          <canvas id="charShowPreview" width="144" height="216"></canvas>
+        </div>
+        <p id="charShowName" class="show-name">—</p>
+        <button id="charEditBtn" class="btn btn-primary btn-block" type="button">编辑人物</button>
+        <button id="charSwitchBtn" class="btn btn-block" type="button">更换人物</button>
+        <button id="charShowBackBtn" class="btn btn-block btn-back" type="button">返回</button>
+      </section>
+
+      <!-- Page 3: character select -->
+      <section id="charSelectPage" class="menu-page">
+        <p class="page-heading">选择人物</p>
+        <div id="charSelectList" class="select-list"></div>
+        <button id="newCharBtn" class="btn btn-primary btn-block" type="button">建立新人物</button>
+        <button id="randomCharBtn" class="btn btn-block" type="button">随机建立</button>
+        <button id="charSelectBackBtn" class="btn btn-block btn-back" type="button">返回</button>
+      </section>
+
+      <!-- Page 4: character designer -->
+      <section id="charEditorPage" class="menu-page">
+        <p class="page-heading">人物设计</p>
+        <!-- 16-char cap enforced in JS (code points), no HTML maxlength. -->
+        <input id="charNameInput" type="text" placeholder="你的名字" autocomplete="off" spellcheck="false">
+        <p class="swatch-label">素体</p>
+        <div id="bodyList"></div>
+        <p class="swatch-label">上衣</p>
+        <div id="topSwatches" class="swatch-row"></div>
+        <p class="swatch-label">裤子</p>
+        <div id="pantsSwatches" class="swatch-row"></div>
+        <p class="swatch-label">肤色</p>
+        <div id="skinSwatches" class="swatch-row swatch-row-skin"></div>
+        <div class="preview-wrap">
+          <canvas id="charPreview" width="96" height="144"></canvas>
+        </div>
+        <button id="saveUseCharBtn" class="btn btn-primary btn-block" type="button">保存并使用</button>
+        <button id="randomizeCharBtn" class="btn btn-block" type="button">随机设计</button>
+        <button id="deleteCharBtn" class="btn btn-danger btn-block hidden" type="button">删除人物</button>
+        <button id="charEditorBackBtn" class="btn btn-block btn-back" type="button">返回</button>
+      </section>
+
+      <!-- Page 5: room show -->
+      <section id="roomShowPage" class="menu-page">
+        <p class="page-heading">房间</p>
+        <p id="roomShowName" class="show-name">—</p>
+        <p id="roomShowStatus" class="show-status"></p>
+        <button id="roomEnterBtn" class="btn btn-primary btn-block" type="button">进入房间</button>
+        <button id="roomSwitchBtn" class="btn btn-block" type="button">更换房间</button>
+        <button id="roomShowBackBtn" class="btn btn-block btn-back" type="button">返回</button>
+      </section>
+
+      <!-- Page 6: room select -->
+      <section id="roomSelectPage" class="menu-page">
+        <p class="page-heading">选择房间</p>
+
+        <details class="server-section">
+          <summary>
+            <span class="server-caption">服务器</span>
+            <span id="connStatus"></span>
+          </summary>
           <input id="serverInput" type="text" class="server-input" placeholder="服务器地址（留空 = 本站）" autocomplete="off" autocapitalize="off" spellcheck="false">
-        </div>
+        </details>
 
-        <div class="active-char-row">
-          <span id="activeCharLabel"></span>
-          <button id="switchCharBtn" class="btn btn-small" type="button">换人物</button>
-        </div>
-
-        <div class="go-row">
+        <div class="find-row">
           <!-- No maxlength: the relay rule is 1-16 CODE POINTS, but HTML
                maxlength counts UTF-16 units and would truncate astral chars
-               (emoji/CJK-ext) in server-valid names. ui.js validates instead. -->
+               in server-valid names. ui.js validates instead. -->
           <input id="roomNameInput" type="text" placeholder="房间名（留空 = 随机新房间）" autocomplete="off" spellcheck="false">
-          <button id="goBtn" class="btn btn-primary" type="button">进入房间</button>
+          <button id="findRoomBtn" class="btn btn-primary" type="button">查找/进入</button>
         </div>
 
         <div id="createPrompt">
           <p id="createPromptText"></p>
-          <div class="create-actions">
-            <label class="public-toggle" for="publicToggle">
-              <input id="publicToggle" type="checkbox" checked>公开房间
-            </label>
-            <button id="confirmCreateBtn" class="btn btn-primary" type="button">创建这个房间</button>
+          <button id="confirmCreateBtn" class="btn btn-primary btn-block" type="button">创建这个房间</button>
+        </div>
+
+        <div id="currentRoomSection" class="room-section hidden">
+          <div class="room-list-header"><span>当前房间</span></div>
+          <div id="currentRoomRow" class="room-list"></div>
+        </div>
+
+        <div id="historySection" class="room-section hidden">
+          <div class="room-list-header"><span>历史房间</span></div>
+          <div id="historyList" class="room-list"></div>
+        </div>
+
+        <div class="room-section">
+          <div class="room-list-header">
+            <span>公开房间</span>
+            <button id="refreshBtn" class="btn btn-small" type="button">刷新</button>
           </div>
+          <div id="publicList" class="room-list"></div>
         </div>
 
-        <!-- History (我的足迹): local vc-history, hidden while empty. -->
-        <div id="historyHeader" class="room-list-header hidden">
-          <span>我的足迹</span>
+        <div class="create-row">
+          <label class="public-toggle" for="publicToggle">
+            <input id="publicToggle" type="checkbox" checked>公开房间
+          </label>
+          <button id="createRoomBtn" class="btn btn-primary" type="button">建立新房间</button>
         </div>
-        <div id="historyList" class="hidden"></div>
 
-        <div class="room-list-header">
-          <span>其他公开房间</span>
-          <button id="refreshBtn" class="btn btn-small" type="button">刷新</button>
-        </div>
-        <div id="roomList"></div>
-
-        <p id="menuError"></p>
+        <button id="roomSelectBackBtn" class="btn btn-block btn-back" type="button">返回</button>
       </section>
+
+      <!-- Shared error line, visible from whichever page is active. -->
+      <p id="menuError"></p>
     </div>
   </div>
 

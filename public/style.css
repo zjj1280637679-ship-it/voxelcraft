@@ -1,4 +1,4 @@
-/* VoxelCraft — shell & HUD styles. No external assets/fonts. */
+/* VoxelCraft (《永远的山根乡》) — shell & HUD styles. No external assets/fonts. */
 
 :root {
   --bg: #10141c;
@@ -10,6 +10,7 @@
   --accent: #5dbb46;
   --accent-dark: #36771f;
   --danger: #ff6b5e;
+  --gold: #f1c40f;
 }
 
 * { box-sizing: border-box; }
@@ -42,6 +43,8 @@ body {
 
 /* ---------- Menu overlay ---------- */
 
+/* The gradient is the fallback layer: when menubg.js fails or is stopped,
+   the transparent #menuBgCanvas lets it show through. */
 #menu {
   position: fixed;
   inset: 0;
@@ -50,60 +53,69 @@ body {
   align-items: center;
   justify-content: center;
   padding: 16px;
-  background-color: rgba(9, 12, 18, 0.93);
   background-image:
-    radial-gradient(900px 480px at 50% -120px, rgba(93, 187, 70, 0.14), transparent 65%),
-    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
-  background-size: auto, 32px 32px, 32px 32px;
+    radial-gradient(900px 480px at 50% -120px, rgba(93, 187, 70, 0.16), transparent 65%),
+    linear-gradient(180deg, #233a4d 0%, #131a26 55%, #0a0d13 100%);
 }
 
-.menu-panel {
-  width: min(340px, 100%);
+#menuBgCanvas {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none;
+  image-rendering: pixelated;
+}
+
+.menu-shell {
+  position: relative;
+  z-index: 1;
+  width: min(360px, 100%);
   max-height: 100%;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  background: var(--panel);
+  background: rgba(22, 27, 37, 0.90);
   border: 2px solid var(--panel-border);
-  border-radius: 10px;
-  padding: 26px 24px 20px;
+  border-radius: 12px;
+  padding: 24px 22px 16px;
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .menu-title {
   margin: 0;
   text-align: center;
-  font-size: 40px;
-  line-height: 1.1;
+  font-size: 34px;
+  line-height: 1.2;
   font-weight: 900;
-  letter-spacing: 1px;
+  letter-spacing: 2px;
   color: var(--accent);
-  font-family: "Arial Black", "Segoe UI Black", "Microsoft YaHei", sans-serif;
   text-shadow: 0 4px 0 var(--accent-dark), 0 8px 0 rgba(0, 0, 0, 0.4);
 }
 
 .menu-sub {
-  margin: 10px 0 22px;
+  margin: 10px 0 20px;
   text-align: center;
   font-size: 13px;
-  letter-spacing: 3px;
+  letter-spacing: 4px;
   color: var(--muted);
 }
 
-/* Two pages inside the panel; ui.js toggles .active (exactly one visible). */
+/* Six pages inside the shell; ui.js toggles .active (exactly one visible). */
 .menu-page { display: none; }
 .menu-page.active { display: block; }
 
 .hidden { display: none !important; }
 
 .page-heading {
-  margin: 0 0 10px;
+  margin: 0 0 12px;
   font-size: 13px;
-  letter-spacing: 1px;
+  letter-spacing: 2px;
   color: var(--muted);
 }
 
-.menu-panel input {
+.menu-shell input {
   width: 100%;
   padding: 12px 14px;
   font-size: 16px; /* >= 16px prevents iOS focus zoom */
@@ -117,8 +129,8 @@ body {
   user-select: text;
 }
 
-.menu-panel input:focus { border-color: var(--accent); }
-.menu-panel input::placeholder { color: #5b6473; }
+.menu-shell input:focus { border-color: var(--accent); }
+.menu-shell input::placeholder { color: #5b6473; }
 
 .btn {
   padding: 12px 16px;
@@ -138,7 +150,6 @@ body {
 .btn:active { transform: translateY(2px); border-bottom-width: 2px; }
 
 .btn-primary {
-  width: 100%;
   color: #0c1607;
   background: var(--accent);
   border-bottom-color: var(--accent-dark);
@@ -152,88 +163,191 @@ body {
 }
 
 .btn-danger {
-  width: 100%;
-  margin-top: 8px;
   color: #ffd9d4;
   background: #7d342c;
   border-bottom-color: #4f201b;
 }
 
-/* ---------- Profile page: character cards ---------- */
-
-#charList {
-  display: grid;
-  /* minmax(0, 1fr), not bare 1fr: a long nowrap .char-name would otherwise
-     set the track's auto minimum to the full text width and overflow. */
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  margin-bottom: 12px;
+/* Stacked full-width page buttons. */
+.btn-block {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
 }
 
-.char-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  min-height: 44px;
-  padding: 10px 8px 8px;
+.btn-back { background: #27303f; }
+
+/* ---------- Entry page ---------- */
+
+.entry-info {
+  margin: 0 0 16px;
+  padding: 8px 12px;
   background: var(--field);
   border: 2px solid var(--panel-border);
   border-radius: 8px;
-  cursor: pointer;
 }
 
-.char-card:hover { border-color: var(--accent); }
-.char-card:active { background: rgba(93, 187, 70, 0.18); }
-.char-card.current { border-color: var(--accent); }
-
-.char-card canvas {
-  width: 32px;
-  height: 48px;
-  image-rendering: pixelated;
-}
-
-.char-name {
-  max-width: 100%;
+.entry-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 28px;
   font-size: 14px;
+}
+
+.entry-label {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.entry-value {
+  flex: 1;
+  min-width: 0;
+  text-align: right;
   font-weight: 700;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.char-edit-btn {
+.entry-status { font-weight: 400; color: var(--muted); }
+
+.btn-big {
   width: 100%;
-  min-height: 40px;
-  padding: 6px 8px;
-  font-size: 13px;
-  font-weight: 700;
-  font-family: inherit;
-  color: var(--muted);
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid var(--panel-border);
-  border-radius: 5px;
-  cursor: pointer;
-  touch-action: manipulation;
+  padding: 14px 16px;
+  font-size: 18px;
+  letter-spacing: 4px;
 }
 
-.char-edit-btn:hover { color: var(--text); background: rgba(255, 255, 255, 0.10); }
+.entry-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
 
-.char-empty {
-  grid-column: 1 / -1;
-  padding: 18px 8px;
+.entry-actions .btn { flex: 1; }
+
+/* ★/gold = "I created this room" (vc-history own flag), never live-host. */
+.room-own { color: var(--gold); }
+
+/* ---------- Show pages (character / room) ---------- */
+
+.show-name {
+  margin: 10px 0 4px;
+  text-align: center;
+  font-size: 20px;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.show-status {
+  min-height: 18px;
+  margin: 0 0 14px;
   text-align: center;
   font-size: 13px;
   color: var(--muted);
+}
+
+.preview-wrap {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 6px;
+}
+
+#charShowPreview {
+  width: 144px;
+  height: 216px;
+  image-rendering: pixelated;
   background: var(--field);
   border: 2px solid var(--panel-border);
   border-radius: 8px;
 }
 
-/* ---------- Profile page: character editor ---------- */
+/* ---------- Select lists (characters & rooms) ---------- */
 
-#charEditor { display: none; }
-#charEditor.show { display: block; }
+.select-list,
+.room-list {
+  max-height: 200px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  background: var(--field);
+  border: 2px solid var(--panel-border);
+  border-radius: 6px;
+}
+
+.select-list { margin-bottom: 4px; }
+
+.select-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 48px;
+  padding: 4px 8px 4px 12px;
+  font-size: 14px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.select-row:last-child { border-bottom: 0; }
+.select-row:hover { background: rgba(255, 255, 255, 0.06); }
+.select-row:active { background: rgba(93, 187, 70, 0.18); }
+.select-row.current { background: rgba(93, 187, 70, 0.10); }
+
+.select-name {
+  min-width: 0;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The status never truncates; the name ellipsizes instead. */
+.row-status {
+  flex: 1;
+  min-width: 32px;
+  white-space: nowrap;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Row action buttons (使用/编辑/移除/隐藏): >=40px touch targets; their
+   click/touch never reaches the row-level handler (JS stopPropagation). */
+.row-btn {
+  flex-shrink: 0;
+  min-width: 48px;
+  min-height: 40px;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-weight: 700;
+  font-family: inherit;
+  color: var(--text);
+  background: #323d4f;
+  border: 0;
+  border-bottom: 3px solid #1d2430;
+  border-radius: 6px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.row-btn:hover { filter: brightness(1.12); }
+.row-btn:active { transform: translateY(1px); border-bottom-width: 2px; }
+
+.row-btn.danger {
+  color: #ffd9d4;
+  background: #5d2c26;
+  border-bottom-color: #3c1b17;
+}
+
+.list-empty {
+  padding: 16px 12px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* ---------- Character designer ---------- */
 
 #charNameInput { margin-bottom: 12px; }
 
@@ -243,12 +357,45 @@ body {
   color: var(--muted);
 }
 
+#bodyList {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0 0 12px;
+}
+
+.body-option {
+  min-height: 40px;
+  padding: 8px 6px;
+  font-size: 13px;
+  font-weight: 700;
+  font-family: inherit;
+  color: var(--text);
+  background: var(--field);
+  border: 2px solid var(--panel-border);
+  border-radius: 6px;
+  cursor: pointer;
+  touch-action: manipulation;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.body-option:hover { border-color: var(--accent); }
+
+.body-option.selected {
+  border-color: var(--accent);
+  background: rgba(93, 187, 70, 0.14);
+}
+
 .swatch-row {
   display: grid;
   grid-template-columns: repeat(8, 1fr);
   gap: 4px;
   margin: 0 0 12px;
 }
+
+.swatch-row-skin { grid-template-columns: repeat(6, 1fr); }
 
 .swatch {
   height: 40px;
@@ -264,12 +411,6 @@ body {
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.35);
 }
 
-.preview-wrap {
-  display: flex;
-  justify-content: center;
-  margin-bottom: 14px;
-}
-
 #charPreview {
   width: 96px;
   height: 144px;
@@ -279,54 +420,56 @@ body {
   border-radius: 6px;
 }
 
-.editor-actions { display: flex; gap: 8px; }
-.editor-actions .btn-primary { flex: 1; width: auto; min-width: 0; }
-.editor-actions .btn { flex-shrink: 0; }
+/* ---------- Room select page ---------- */
 
-/* ---------- Lobby page ---------- */
-
-/* Connection status + server address (lobby header block). */
-.conn-block { margin-bottom: 12px; }
-
-#connStatus {
-  min-height: 16px;
-  margin: 0 0 6px;
-  font-size: 12px;
-  line-height: 1.3;
-  color: var(--muted);
+/* Server mini-section: collapsed to one summary line by default. */
+.server-section {
+  margin: 0 0 10px;
+  background: var(--field);
+  border: 2px solid var(--panel-border);
+  border-radius: 6px;
+  padding: 0 10px;
 }
 
-#connStatus.ok { color: var(--accent); }
-#connStatus.bad { color: var(--danger); }
-
-.menu-panel .server-input {
-  font-size: 12px;
-  padding: 8px 10px;
-  opacity: 0.75;
-}
-
-.active-char-row {
+.server-section summary {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
-  margin-bottom: 12px;
+  min-height: 40px;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+  list-style: none;
 }
 
-#activeCharLabel {
+.server-section summary::-webkit-details-marker { display: none; }
+.server-section summary::before { content: "▸"; flex-shrink: 0; }
+.server-section[open] summary::before { content: "▾"; }
+
+.server-caption { flex-shrink: 0; }
+
+#connStatus {
   flex: 1;
   min-width: 0;
-  font-size: 14px;
-  font-weight: 700;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* Room-name input + go button share one row. */
-.go-row { display: flex; gap: 8px; }
-.go-row #roomNameInput { flex: 1; min-width: 0; }
-.go-row .btn-primary { width: auto; flex-shrink: 0; }
+#connStatus.ok { color: var(--accent); }
+#connStatus.bad { color: var(--danger); }
+
+.menu-shell .server-input {
+  font-size: 12px;
+  padding: 8px 10px;
+  margin: 0 0 10px;
+  opacity: 0.85;
+}
+
+/* Room-name input + find button share one row. */
+.find-row { display: flex; gap: 8px; }
+.find-row #roomNameInput { flex: 1; min-width: 0; }
+.find-row .btn-primary { flex-shrink: 0; }
 
 /* "Not found — create it?" prompt, hidden until a lookup misses. */
 #createPrompt {
@@ -341,14 +484,33 @@ body {
 #createPrompt.show { display: block; }
 
 #createPromptText {
-  margin: 0 0 10px;
+  margin: 0;
   font-size: 14px;
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
 
-.create-actions { display: flex; gap: 8px; }
-.create-actions .btn-primary { flex: 1; width: auto; min-width: 0; }
+.room-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 12px 0 6px;
+  font-size: 13px;
+  letter-spacing: 1px;
+  color: var(--muted);
+}
+
+#currentRoomRow { max-height: none; }
+#historyList { max-height: 148px; }
+#publicList { max-height: 160px; }
+
+.create-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.create-row .btn-primary { flex: 1; min-width: 0; }
 
 .public-toggle {
   flex-shrink: 0;
@@ -366,7 +528,7 @@ body {
   white-space: nowrap;
 }
 
-.menu-panel .public-toggle input[type="checkbox"] {
+.menu-shell .public-toggle input[type="checkbox"] {
   width: 16px;
   height: 16px;
   padding: 0;
@@ -375,96 +537,9 @@ body {
   cursor: pointer;
 }
 
-/* Public room list. */
-.room-list-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin: 16px 0 6px;
-  font-size: 13px;
-  letter-spacing: 1px;
-  color: var(--muted);
-}
-
-#historyList,
-#roomList {
-  max-height: 200px;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  background: var(--field);
-  border: 2px solid var(--panel-border);
-  border-radius: 6px;
-}
-
-/* History (我的足迹) sits above the public list — cap it shorter. */
-#historyList { max-height: 148px; }
-
-.room-row {
-  display: flex;
-  align-items: center;
-  min-height: 44px;
-  padding: 2px 12px;
-  font-size: 14px;
-  cursor: pointer;
-  border-bottom: 1px solid var(--panel-border);
-}
-
-.room-row:last-child { border-bottom: 0; }
-.room-row:hover { background: rgba(255, 255, 255, 0.06); }
-.room-row:active { background: rgba(93, 187, 70, 0.18); }
-
-/* Long names ellipsize; the status (" · N人" / " · 不在线") never truncates,
-   so a 16-char name + 不在线 + × still fits a 360px viewport. */
-.room-name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.room-own { color: #f1c40f; } /* rooms this player created (host history) */
-
-.room-status {
-  flex-shrink: 0;
-  white-space: nowrap;
-  color: var(--muted);
-}
-
-/* History-row delete: >=40px touch target pushed to the row's right edge
-   (negative margin bleeds into the row padding to keep the visual size). */
-.room-del {
-  flex-shrink: 0;
-  width: 40px;
-  height: 40px;
-  margin: 0 -8px 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  font-size: 20px;
-  line-height: 1;
-  font-family: inherit;
-  color: var(--muted);
-  background: transparent;
-  border: 0;
-  border-radius: 6px;
-  cursor: pointer;
-  touch-action: manipulation;
-}
-
-.room-del:hover { color: var(--danger); background: rgba(255, 255, 255, 0.08); }
-.room-del:active { color: var(--danger); background: rgba(255, 107, 94, 0.22); }
-
-.room-empty {
-  padding: 18px 12px;
-  text-align: center;
-  font-size: 13px;
-  color: var(--muted);
-}
-
 #menuError {
   min-height: 20px;
-  margin: 14px 0 0;
+  margin: 12px 0 0;
   text-align: center;
   font-size: 14px;
   color: var(--danger);
@@ -709,21 +784,22 @@ body {
   #jumpBtn { bottom: calc(110px + env(safe-area-inset-bottom)); }
 }
 
-/* Narrow phones: trim panel padding so 8 swatches per row keep usable size. */
+/* Narrow phones: trim shell padding so 8 swatches per row keep usable size. */
 @media (max-width: 380px) {
-  .menu-panel { padding: 22px 14px 16px; }
+  .menu-shell { padding: 20px 14px 14px; }
 }
 
 /* Short viewports (small phones, landscape): keep the whole menu reachable
-   without relying on panel scroll. */
+   without relying on shell scroll alone. */
 @media (max-height: 720px) {
   .menu-title {
-    font-size: 32px;
+    font-size: 28px;
     text-shadow: 0 3px 0 var(--accent-dark), 0 6px 0 rgba(0, 0, 0, 0.4);
   }
   .menu-sub { margin: 8px 0 14px; }
-  #roomList { max-height: 132px; }
+  .select-list, #publicList { max-height: 132px; }
   #historyList { max-height: 100px; }
   #charPreview { width: 72px; height: 108px; }
-  .preview-wrap { margin-bottom: 10px; }
+  #charShowPreview { width: 96px; height: 144px; }
+  .preview-wrap { margin-bottom: 4px; }
 }
