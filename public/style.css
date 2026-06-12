@@ -1,16 +1,22 @@
-/* VoxelCraft (《永远的山根乡》) — shell & HUD styles. No external assets/fonts. */
+/* VoxelCraft (《永远的山根乡》) — shell & HUD styles. No external assets/fonts.
+   Menu theme: warm sunset voxel-fantasy — dark walnut panels, gold-copper trim,
+   wood-sign banners, beveled pixel buttons. HUD/touch layout rules unchanged. */
 
 :root {
-  --bg: #10141c;
-  --panel: #1b212c;
-  --panel-border: #2c3544;
-  --field: #11161f;
-  --text: #e8ecf2;
-  --muted: #8b94a5;
+  --bg: #1a120b;
+  --panel: rgba(42, 28, 18, 0.92);        /* #2a1c12 @ .92 */
+  --panel-edge-out: #15100a;              /* outermost 1px ring */
+  --copper: #c9a227;                      /* main 2px trim */
+  --panel-glint: rgba(255, 230, 160, 0.25); /* inner 1px highlight */
+  --field: rgba(26, 16, 9, 0.78);
+  --field-border: #7a5a26;
+  --text: #f3e7c9;
+  --muted: #c9b386;
   --accent: #5dbb46;
   --accent-dark: #36771f;
   --danger: #ff6b5e;
   --gold: #f1c40f;
+  --btn-edge: #1a120b;
 }
 
 * { box-sizing: border-box; }
@@ -43,8 +49,8 @@ body {
 
 /* ---------- Menu overlay ---------- */
 
-/* The gradient is the fallback layer: when menubg.js fails or is stopped,
-   the transparent #menuBgCanvas lets it show through. */
+/* Sunset-gradient fallback layer: when menubg.js fails or is stopped, the
+   transparent #menuBgCanvas lets it show through. */
 #menu {
   position: fixed;
   inset: 0;
@@ -54,8 +60,8 @@ body {
   justify-content: center;
   padding: 16px;
   background-image:
-    radial-gradient(900px 480px at 50% -120px, rgba(93, 187, 70, 0.16), transparent 65%),
-    linear-gradient(180deg, #233a4d 0%, #131a26 55%, #0a0d13 100%);
+    radial-gradient(900px 480px at 50% -120px, rgba(255, 170, 80, 0.20), transparent 65%),
+    linear-gradient(180deg, #3b2350 0%, #8c4a2f 42%, #d97f3e 66%, #2c1a10 100%);
 }
 
 #menuBgCanvas {
@@ -69,37 +75,83 @@ body {
   image-rendering: pixelated;
 }
 
+/* Sunset wash + soft vignette painted over the postcard canvas.
+   Pure decoration — never intercepts pointer events. */
+.sunset-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background-image:
+    linear-gradient(180deg,
+      rgba(255, 150, 70, 0.30) 0%,
+      rgba(150, 80, 160, 0.18) 46%,
+      rgba(150, 80, 160, 0) 78%),
+    radial-gradient(130% 100% at 50% 45%,
+      rgba(0, 0, 0, 0) 58%,
+      rgba(12, 6, 2, 0.42) 100%);
+}
+
+/* Centered card panel: outer 1px dark ring + 2px gold-copper trim +
+   inner 1px warm glint. */
 .menu-shell {
   position: relative;
-  z-index: 1;
+  z-index: 2;
   width: min(360px, 100%);
   max-height: 100%;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  background: rgba(22, 27, 37, 0.90);
-  border: 2px solid var(--panel-border);
-  border-radius: 12px;
+  background: var(--panel);
+  border: 2px solid var(--copper);
+  border-radius: 8px;
   padding: 24px 22px 16px;
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  box-shadow:
+    0 0 0 1px var(--panel-edge-out),
+    0 18px 50px rgba(0, 0, 0, 0.55),
+    inset 0 0 0 1px var(--panel-glint);
 }
 
+/* Big entry title: gold gradient fill with chunky 3D drop edge.
+   (drop-shadow instead of text-shadow: with background-clip:text a text-shadow
+   bleeds through the transparent glyph fill.) */
 .menu-title {
   margin: 0;
   text-align: center;
-  font-size: 34px;
-  line-height: 1.2;
+  font-size: clamp(30px, 9vw, 38px);
+  line-height: 1.25;
   font-weight: 900;
   letter-spacing: 2px;
-  color: var(--accent);
-  text-shadow: 0 4px 0 var(--accent-dark), 0 8px 0 rgba(0, 0, 0, 0.4);
+  color: var(--gold);
+  filter:
+    drop-shadow(0 2px 0 #4a2c12)
+    drop-shadow(0 2px 1px rgba(0, 0, 0, 0.55))
+    drop-shadow(0 0 1px #15100a);
 }
 
+@supports ((-webkit-background-clip: text) or (background-clip: text)) {
+  .menu-title {
+    background-image: linear-gradient(180deg, #ffe9a8 0%, #f1c40f 48%, #c9772a 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+  }
+}
+
+/* Subtitle as a small hanging wood plaque. */
 .menu-sub {
-  margin: 10px 0 20px;
+  width: fit-content;
+  margin: 12px auto 20px;
+  padding: 5px 14px;
   text-align: center;
-  font-size: 13px;
+  font-size: 12px;
   letter-spacing: 4px;
-  color: var(--muted);
+  text-indent: 4px; /* visually balances the letter-spacing tail */
+  color: #e8d5a8;
+  background: linear-gradient(180deg, #5a3d24 0%, #3c2817 100%);
+  border: 1px solid var(--copper);
+  border-radius: 5px;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 230, 160, 0.18);
 }
 
 /* Six pages inside the shell; ui.js toggles .active (exactly one visible). */
@@ -108,11 +160,38 @@ body {
 
 .hidden { display: none !important; }
 
+/* Per-page heading as a wood-sign banner with ◆ finials. */
 .page-heading {
-  margin: 0 0 12px;
-  font-size: 13px;
-  letter-spacing: 2px;
-  color: var(--muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto 14px;
+  padding: 8px 18px;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 4px;
+  text-indent: 4px;
+  color: #f6e7b8;
+  text-shadow:
+    1px 1px 0 #2a1708, -1px 1px 0 #2a1708,
+    1px -1px 0 #2a1708, -1px -1px 0 #2a1708;
+  background: linear-gradient(180deg, #5a3d24 0%, #3c2817 100%);
+  border: 1px solid var(--copper);
+  border-radius: 6px;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 230, 160, 0.18);
+}
+
+.page-heading::before,
+.page-heading::after {
+  content: "◆";
+  flex-shrink: 0;
+  font-size: 9px;
+  color: var(--copper);
+  text-shadow: none;
+  text-indent: 0;
 }
 
 .menu-shell input {
@@ -121,51 +200,105 @@ body {
   font-size: 16px; /* >= 16px prevents iOS focus zoom */
   font-family: inherit;
   color: var(--text);
-  background: var(--field);
-  border: 2px solid var(--panel-border);
+  background: #1f140c;
+  border: 2px solid var(--panel-edge-out);
   border-radius: 6px;
   outline: none;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.35);
   -webkit-user-select: text;
   user-select: text;
 }
 
-.menu-shell input:focus { border-color: var(--accent); }
-.menu-shell input::placeholder { color: #5b6473; }
+.menu-shell input:focus { border-color: var(--copper); }
+.menu-shell input::placeholder { color: #8a7355; }
+
+/* ---------- Buttons: beveled pixel look ----------
+   2px dark frame + inset bevel (light top-left, dark bottom-right);
+   :active sinks the face by inverting the bevel. */
 
 .btn {
+  min-height: 44px;
   padding: 12px 16px;
   font-size: 16px;
   font-weight: 700;
   font-family: inherit;
   color: var(--text);
-  background: #323d4f;
-  border: 0;
-  border-bottom: 4px solid #1d2430;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+  background: linear-gradient(180deg, #7a5230 0%, #5a3a22 100%);
+  border: 2px solid var(--btn-edge);
   border-radius: 6px;
+  box-shadow:
+    inset 0 2px 0 rgba(255, 235, 190, 0.28),
+    inset 2px 0 0 rgba(255, 235, 190, 0.14),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.32),
+    inset -2px 0 0 rgba(0, 0, 0, 0.18);
   cursor: pointer;
   touch-action: manipulation;
 }
 
 .btn:hover { filter: brightness(1.08); }
-.btn:active { transform: translateY(2px); border-bottom-width: 2px; }
 
-.btn-primary {
-  color: #0c1607;
-  background: var(--accent);
-  border-bottom-color: var(--accent-dark);
+.btn:active {
+  transform: translateY(1px);
+  box-shadow:
+    inset 0 2px 0 rgba(0, 0, 0, 0.32),
+    inset 2px 0 0 rgba(0, 0, 0, 0.18),
+    inset 0 -2px 0 rgba(255, 235, 190, 0.16),
+    inset -2px 0 0 rgba(255, 235, 190, 0.10);
 }
 
-.btn-small {
-  min-height: 40px;
-  padding: 8px 12px;
-  font-size: 13px;
-  border-bottom-width: 3px;
+/* Keyboard focus: the UA default outline is hard to see on the dark wood
+   theme — use a shared gold focus ring (inputs keep their :focus border). */
+.btn:focus-visible,
+.row-btn:focus-visible,
+.swatch:focus-visible,
+.body-option:focus-visible,
+.server-section summary:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+/* Role palettes (declared after .btn-primary so they win on shared buttons). */
+.btn-primary {
+  color: #3a2410;
+  text-shadow: 0 1px 0 rgba(255, 240, 200, 0.45);
+  background: linear-gradient(180deg, #f1c40f 0%, #c9a227 100%);
+}
+
+.btn-switch {
+  color: #fff;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+  background: linear-gradient(180deg, #2980b9 0%, #17527e 100%);
+}
+
+.btn-random {
+  color: #fff;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+  background: linear-gradient(180deg, #9b59b6 0%, #6f3f87 100%);
+}
+
+.btn-create {
+  color: #0e2a08;
+  text-shadow: 0 1px 0 rgba(220, 255, 200, 0.35);
+  background: linear-gradient(180deg, #5dbb46 0%, #3e8c30 100%);
+}
+
+.btn-back {
+  color: #fff;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+  background: linear-gradient(180deg, #b9722d 0%, #8a5520 100%);
 }
 
 .btn-danger {
-  color: #ffd9d4;
-  background: #7d342c;
-  border-bottom-color: #4f201b;
+  color: #fff;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+  background: linear-gradient(180deg, #d6543f 0%, #99301f 100%);
+}
+
+.btn-small {
+  min-height: 44px;
+  padding: 8px 12px;
+  font-size: 13px;
 }
 
 /* Stacked full-width page buttons. */
@@ -175,7 +308,34 @@ body {
   margin-top: 8px;
 }
 
-.btn-back { background: #27303f; }
+/* Button icon prefixes — pure CSS, JS button text untouched. */
+#enterWorldBtn::before,
+#roomEnterBtn::before { content: "\2694\FE0F"; }
+#charPageBtn::before { content: "👤"; }
+#roomPageBtn::before { content: "🏠"; }
+#charEditBtn::before { content: "\270F\FE0F"; }
+#saveUseCharBtn::before,
+.btn-switch::before { content: "🔁"; }
+.btn-random::before { content: "🎲"; }
+.btn-create::before { content: "＋"; }
+.btn-back::before { content: "←"; }
+#deleteCharBtn::before { content: "\1F5D1\FE0F"; }
+
+#enterWorldBtn::before,
+#roomEnterBtn::before,
+#charPageBtn::before,
+#roomPageBtn::before,
+#charEditBtn::before,
+#saveUseCharBtn::before,
+#deleteCharBtn::before,
+.btn-switch::before,
+.btn-random::before,
+.btn-create::before,
+.btn-back::before {
+  display: inline-block;
+  margin-right: 7px;
+  text-shadow: none;
+}
 
 /* ---------- Entry page ---------- */
 
@@ -183,8 +343,9 @@ body {
   margin: 0 0 16px;
   padding: 8px 12px;
   background: var(--field);
-  border: 2px solid var(--panel-border);
+  border: 1px solid var(--field-border);
   border-radius: 8px;
+  box-shadow: inset 0 1px 0 rgba(255, 230, 160, 0.10);
 }
 
 .entry-row {
@@ -255,13 +416,18 @@ body {
   margin-bottom: 6px;
 }
 
+/* Show-page subject: enlarged, centered, gold-framed display case. */
 #charShowPreview {
-  width: 144px;
-  height: 216px;
+  width: 160px;
+  height: 240px;
   image-rendering: pixelated;
-  background: var(--field);
-  border: 2px solid var(--panel-border);
+  background: linear-gradient(180deg, rgba(58, 36, 20, 0.85), rgba(34, 21, 12, 0.92));
+  border: 2px solid var(--copper);
   border-radius: 8px;
+  box-shadow:
+    0 0 0 1px var(--panel-edge-out),
+    inset 0 0 0 1px rgba(255, 230, 160, 0.20),
+    0 6px 18px rgba(0, 0, 0, 0.40);
 }
 
 /* ---------- Select lists (characters & rooms) ---------- */
@@ -272,7 +438,7 @@ body {
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   background: var(--field);
-  border: 2px solid var(--panel-border);
+  border: 1px solid var(--field-border);
   border-radius: 6px;
 }
 
@@ -286,13 +452,19 @@ body {
   padding: 4px 8px 4px 12px;
   font-size: 14px;
   cursor: pointer;
-  border-bottom: 1px solid var(--panel-border);
+  border-bottom: 1px solid rgba(122, 90, 38, 0.45);
 }
 
 .select-row:last-child { border-bottom: 0; }
-.select-row:hover { background: rgba(255, 255, 255, 0.06); }
-.select-row:active { background: rgba(93, 187, 70, 0.18); }
-.select-row.current { background: rgba(93, 187, 70, 0.10); }
+.select-row:hover { background: rgba(255, 210, 140, 0.07); }
+.select-row:active { background: rgba(241, 196, 15, 0.16); }
+.select-row.current { background: rgba(241, 196, 15, 0.10); }
+
+/* JS-generated 40px portrait thumb (sizing is inline; this is just dressing). */
+.avatar-thumb {
+  background: rgba(58, 36, 20, 0.6);
+  border: 1px solid rgba(201, 162, 39, 0.35);
+}
 
 .select-name {
   min-width: 0;
@@ -312,32 +484,39 @@ body {
   text-overflow: ellipsis;
 }
 
-/* Row action buttons (使用/编辑/移除/隐藏): >=40px touch targets; their
+/* Row action buttons (使用/编辑/移除/隐藏): >=44px touch targets; their
    click/touch never reaches the row-level handler (JS stopPropagation). */
 .row-btn {
   flex-shrink: 0;
   min-width: 48px;
-  min-height: 40px;
+  min-height: 44px;
   padding: 6px 10px;
   font-size: 13px;
   font-weight: 700;
   font-family: inherit;
-  color: var(--text);
-  background: #323d4f;
-  border: 0;
-  border-bottom: 3px solid #1d2430;
+  color: #fff;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+  background: linear-gradient(180deg, #2980b9 0%, #17527e 100%);
+  border: 2px solid var(--btn-edge);
   border-radius: 6px;
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.25),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.28);
   cursor: pointer;
   touch-action: manipulation;
 }
 
 .row-btn:hover { filter: brightness(1.12); }
-.row-btn:active { transform: translateY(1px); border-bottom-width: 2px; }
+
+.row-btn:active {
+  transform: translateY(1px);
+  box-shadow:
+    inset 0 2px 0 rgba(0, 0, 0, 0.28),
+    inset 0 -2px 0 rgba(255, 255, 255, 0.12);
+}
 
 .row-btn.danger {
-  color: #ffd9d4;
-  background: #5d2c26;
-  border-bottom-color: #3c1b17;
+  background: linear-gradient(180deg, #d6543f 0%, #8f2e1f 100%);
 }
 
 .list-empty {
@@ -354,6 +533,7 @@ body {
 .swatch-label {
   margin: 0 0 4px;
   font-size: 12px;
+  letter-spacing: 1px;
   color: var(--muted);
 }
 
@@ -365,14 +545,14 @@ body {
 }
 
 .body-option {
-  min-height: 40px;
+  min-height: 44px;
   padding: 8px 6px;
   font-size: 13px;
   font-weight: 700;
   font-family: inherit;
   color: var(--text);
-  background: var(--field);
-  border: 2px solid var(--panel-border);
+  background: rgba(31, 20, 12, 0.9);
+  border: 2px solid #5a4326;
   border-radius: 6px;
   cursor: pointer;
   touch-action: manipulation;
@@ -381,11 +561,12 @@ body {
   text-overflow: ellipsis;
 }
 
-.body-option:hover { border-color: var(--accent); }
+.body-option:hover { border-color: var(--copper); }
 
 .body-option.selected {
-  border-color: var(--accent);
-  background: rgba(93, 187, 70, 0.14);
+  color: #ffe9a8;
+  border-color: var(--gold);
+  background: rgba(241, 196, 15, 0.12);
 }
 
 .swatch-row {
@@ -398,26 +579,28 @@ body {
 .swatch-row-skin { grid-template-columns: repeat(6, 1fr); }
 
 .swatch {
-  height: 40px;
+  height: 44px;
   padding: 0;
-  border: 2px solid rgba(255, 255, 255, 0.12);
+  border: 2px solid var(--panel-edge-out);
   border-radius: 5px;
   cursor: pointer;
   touch-action: manipulation;
 }
 
+/* Gold-rimmed selected swatch. */
 .swatch.selected {
-  border-color: #fff;
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.35);
+  border-color: var(--gold);
+  box-shadow: 0 0 0 2px var(--copper), 0 0 8px rgba(241, 196, 15, 0.55);
 }
 
 #charPreview {
   width: 96px;
   height: 144px;
   image-rendering: pixelated;
-  background: var(--field);
-  border: 2px solid var(--panel-border);
+  background: linear-gradient(180deg, rgba(58, 36, 20, 0.85), rgba(34, 21, 12, 0.92));
+  border: 2px solid var(--copper);
   border-radius: 6px;
+  box-shadow: 0 0 0 1px var(--panel-edge-out), inset 0 0 0 1px rgba(255, 230, 160, 0.18);
 }
 
 /* ---------- Room select page ---------- */
@@ -426,7 +609,7 @@ body {
 .server-section {
   margin: 0 0 10px;
   background: var(--field);
-  border: 2px solid var(--panel-border);
+  border: 1px solid var(--field-border);
   border-radius: 6px;
   padding: 0 10px;
 }
@@ -435,7 +618,7 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 40px;
+  min-height: 44px;
   font-size: 12px;
   color: var(--muted);
   cursor: pointer;
@@ -443,7 +626,7 @@ body {
 }
 
 .server-section summary::-webkit-details-marker { display: none; }
-.server-section summary::before { content: "▸"; flex-shrink: 0; }
+.server-section summary::before { content: "▸"; flex-shrink: 0; color: var(--copper); }
 .server-section[open] summary::before { content: "▾"; }
 
 .server-caption { flex-shrink: 0; }
@@ -522,7 +705,7 @@ body {
   font-weight: 700;
   color: var(--text);
   background: var(--field);
-  border: 2px solid var(--panel-border);
+  border: 1px solid var(--field-border);
   border-radius: 6px;
   cursor: pointer;
   white-space: nowrap;
@@ -533,8 +716,9 @@ body {
   height: 16px;
   padding: 0;
   margin: 0;
-  accent-color: var(--accent);
+  accent-color: var(--copper);
   cursor: pointer;
+  box-shadow: none;
 }
 
 #menuError {
@@ -792,14 +976,11 @@ body {
 /* Short viewports (small phones, landscape): keep the whole menu reachable
    without relying on shell scroll alone. */
 @media (max-height: 720px) {
-  .menu-title {
-    font-size: 28px;
-    text-shadow: 0 3px 0 var(--accent-dark), 0 6px 0 rgba(0, 0, 0, 0.4);
-  }
-  .menu-sub { margin: 8px 0 14px; }
+  .menu-title { font-size: clamp(24px, 7vw, 28px); }
+  .menu-sub { margin: 8px auto 14px; }
   .select-list, #publicList { max-height: 132px; }
   #historyList { max-height: 100px; }
   #charPreview { width: 72px; height: 108px; }
-  #charShowPreview { width: 96px; height: 144px; }
+  #charShowPreview { width: 128px; height: 192px; }
   .preview-wrap { margin-bottom: 4px; }
 }

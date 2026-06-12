@@ -11,11 +11,36 @@ import { World } from './world.js';
 import { buildAtlas } from './textures.js';
 import { buildChunkGeometry } from './mesher.js';
 
-const SKY = 0x87ceeb;
+// Warm-sunset palette: purple zenith fading to a #ff9a5a-family horizon; the
+// fog sits in the same family so terrain melts into the horizon band.
+const SKY_TOP = '#4b3470';      // zenith — dusk purple
+const SKY_MID = '#9a5a78';      // mid sky — mauve
+const SKY_LOW = '#e8824e';      // lower sky — ember orange
+const SKY_HORIZON = '#ff9a5a';  // horizon — warm orange
+const FOG = 0xf99355;           // between SKY_LOW and SKY_HORIZON
 const RADIUS = 3;          // chunks around the center column — postcard, not gameplay
 const ORBIT_SPEED = 0.05;  // rad/s — slow drift
 const ORBIT_DIST = 34;     // camera distance from the center column
 const DEFAULT_SEED = 1337;
+
+// Screen-space vertical gradient used as scene.background (three stretches a
+// plain 2D texture across the viewport — no extra geometry needed).
+function buildSkyTexture() {
+  const c = document.createElement('canvas');
+  c.width = 2;
+  c.height = 256;
+  const g = c.getContext('2d');
+  const grad = g.createLinearGradient(0, 0, 0, 256);
+  grad.addColorStop(0, SKY_TOP);
+  grad.addColorStop(0.45, SKY_MID);
+  grad.addColorStop(0.75, SKY_LOW);
+  grad.addColorStop(1, SKY_HORIZON);
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 2, 256);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
 
 export function startMenuBg(canvas, seed) {
   try {
@@ -37,6 +62,7 @@ function start(canvas, seed) {
   let renderer = null;
   let material = null;
   let atlas = null;
+  let skyTex = null;
   const geos = [];
   let resizeHandler = null;
   try {
@@ -46,13 +72,16 @@ function start(canvas, seed) {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 0.75));
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(SKY);
-  scene.fog = new THREE.Fog(SKY, ORBIT_DIST + CHUNK, ORBIT_DIST + RADIUS * CHUNK * 1.8);
+  skyTex = buildSkyTexture();
+  scene.background = skyTex;
+  scene.fog = new THREE.Fog(FOG, ORBIT_DIST + CHUNK, ORBIT_DIST + RADIUS * CHUNK * 1.8);
 
   const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 500);
-  scene.add(new THREE.HemisphereLight(0xcfe8ff, 0x7a6a52, 0.9));
-  const sun = new THREE.DirectionalLight(0xffffff, 1.1);
-  sun.position.set(60, 100, 40);
+  // Late-afternoon light: warm sky dome over warm brown bounce, and a low
+  // amber sun so faces catch long sunset light instead of noon white.
+  scene.add(new THREE.HemisphereLight(0xffd9a6, 0x6b4a3a, 0.85));
+  const sun = new THREE.DirectionalLight(0xffb070, 1.05);
+  sun.position.set(80, 35, -60);
   scene.add(sun);
 
   atlas = buildAtlas();
@@ -109,6 +138,7 @@ function start(canvas, seed) {
       for (const g of geos) g.dispose();
       material.dispose();
       atlas.texture.dispose();
+      skyTex.dispose();
       renderer.dispose();
       // Drop the GL context promptly — a game session is usually about to
       // claim its own context on #gameCanvas.
@@ -151,6 +181,7 @@ function start(canvas, seed) {
       for (const g of geos) g.dispose();
       if (material) material.dispose();
       if (atlas && atlas.texture) atlas.texture.dispose();
+      if (skyTex) skyTex.dispose();
       if (renderer) {
         renderer.dispose();
         if (typeof renderer.forceContextLoss === 'function') renderer.forceContextLoss();

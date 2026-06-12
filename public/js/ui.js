@@ -191,6 +191,52 @@ function drawAvatar(canvas, skin) {
   box('rgba(0,0,0,0.25)', cx - 1, yLeg + 1, 2, legH - 2);
 }
 
+// Head close-up for the 40px list thumbnails: skin-tone head + top-color
+// shoulders with a 2px dark outline — a portrait crop of the same skin data
+// drawAvatar uses. Logical 40x40 grid scaled to the backing store.
+function drawAvatarBust(canvas, skin) {
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const sk = cleanSkin(skin);
+  const u = canvas.width / 40;
+  const px = (x, y, bw, bh, color) => {
+    ctx.fillStyle = color;
+    ctx.fillRect(Math.round(x * u), Math.round(y * u),
+      Math.max(1, Math.round(bw * u)), Math.max(1, Math.round(bh * u)));
+  };
+  // soft warm backdrop so the portrait reads as a tile on any row color
+  px(0, 0, 40, 40, 'rgba(20, 14, 8, 0.40)');
+  // shoulders (top color); broad bodies get slightly wider shoulders
+  const shW = BODIES[sk.b] && BODIES[sk.b].w > 1 ? 28 : 24;
+  px(20 - shW / 2 - 2, 25, shW + 4, 15, '#1a120b');        // 2px outline
+  px(20 - shW / 2, 27, shW, 13, PALETTE[sk.t]);
+  // head (skin tone) over the shoulders
+  px(9, 3, 22, 24, '#1a120b');                              // 2px outline
+  px(11, 5, 18, 20, SKIN_TONES[sk.k]);
+  // blocky right-edge shade + simple eyes, matching drawAvatar's 3D hints
+  px(24, 5, 5, 20, 'rgba(0, 0, 0, 0.18)');
+  px(15, 13, 3, 3, 'rgba(20, 14, 8, 0.85)');
+  px(22, 13, 3, 3, 'rgba(20, 14, 8, 0.85)');
+}
+
+// Integer-multiple backing store for a preview canvas: CSS size x ceil(dpr),
+// so the blocky avatar stays sharp on hi-DPI screens (no half-pixel blur).
+// Falls back to the original attribute size while the page is hidden.
+function crispCanvas(canvas) {
+  if (!canvas.dataset.baseW) {
+    canvas.dataset.baseW = String(canvas.width);
+    canvas.dataset.baseH = String(canvas.height);
+  }
+  const rect = canvas.getBoundingClientRect();
+  const cssW = Math.round(rect.width) || Number(canvas.dataset.baseW);
+  const cssH = Math.round(rect.height) || Number(canvas.dataset.baseH);
+  const scale = Math.max(1, Math.min(4, Math.ceil(window.devicePixelRatio || 1)));
+  const w = cssW * scale;
+  const h = cssH * scale;
+  if (canvas.width !== w) canvas.width = w;
+  if (canvas.height !== h) canvas.height = h;
+}
+
 // ---------- six pages: navigation ----------
 
 const PAGE_IDS = {
@@ -227,7 +273,9 @@ function refreshCharDisplays() {
 function refreshCharShow() {
   const c = getActiveChar();
   $('charShowName').textContent = c ? c.name : '—';
-  drawAvatar($('charShowPreview'), c ? c.skin : null);
+  const preview = $('charShowPreview');
+  crispCanvas(preview); // large, integer-scaled backing store -> sharp blocks
+  drawAvatar(preview, c ? c.skin : null);
 }
 
 // ---------- character select page ----------
@@ -261,6 +309,21 @@ function renderCharSelectList() {
   chars.forEach((c, i) => {
     const row = document.createElement('div');
     row.className = i === activeIndex ? 'select-row current' : 'select-row';
+    // 40px portrait thumbnail at the row start (pure decoration — clicks on
+    // it simply fall through to the row handler like the name does).
+    const av = document.createElement('canvas');
+    av.className = 'avatar-thumb';
+    const thumbScale = Math.max(2, Math.min(4, Math.ceil(window.devicePixelRatio || 1)));
+    av.width = 40 * thumbScale;
+    av.height = 40 * thumbScale;
+    av.style.width = '40px';
+    av.style.height = '40px';
+    av.style.flex = '0 0 40px';
+    av.style.marginRight = '8px';
+    av.style.borderRadius = '6px';
+    av.style.imageRendering = 'pixelated';
+    drawAvatarBust(av, c.skin);
+    row.appendChild(av);
     const nm = document.createElement('span');
     nm.className = 'select-name';
     nm.textContent = c.name;
@@ -341,7 +404,9 @@ function refreshEditor() {
   markSelected($('topSwatches'), editSkin.t);
   markSelected($('pantsSwatches'), editSkin.p);
   markSelected($('skinSwatches'), editSkin.k);
-  drawAvatar($('charPreview'), editSkin);
+  const preview = $('charPreview');
+  crispCanvas(preview); // same sharp integer scaling as the show page
+  drawAvatar(preview, editSkin);
 }
 
 function openEditor(i) {
