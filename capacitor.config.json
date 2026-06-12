@@ -1,0 +1,9 @@
+{
+  "appId": "com.voxelcraft.app",
+  "appName": "VoxelCraft",
+  "webDir": "public",
+  "server": {
+    "androidScheme": "https",
+    "cleartext": true
+  }
+}

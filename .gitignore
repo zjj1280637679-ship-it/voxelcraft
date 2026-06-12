@@ -1,0 +1,19 @@
+# 依赖
+node_modules/
+
+# 大体积二进制:不入库
+tools/bin/
+public/VoxelCraft.apk
+
+# 安卓构建产物(Capacitor 工程本身保留)
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/capacitor-cordova-android-plugins/
+android/app/src/main/assets/public/
+android/app/src/main/assets/capacitor.config.json
+
+# 杂项
+*.log
+Thumbs.db

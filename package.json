@@ -1,0 +1,20 @@
+{
+  "name": "voxelcraft",
+  "version": "0.1.0",
+  "description": "Cross-platform (PC/Android/iOS browser) voxel sandbox with room-based multiplayer",
+  "type": "module",
+  "scripts": {
+    "start": "node server/index.js",
+    "build:dist": "node tools/build-dist.mjs"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.4.0",
+    "@capacitor/cli": "^8.4.0",
+    "@capacitor/core": "^8.4.0",
+    "three": "^0.184.0",
+    "ws": "^8.21.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.1"
+  }
+}

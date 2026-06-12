@@ -1,0 +1,729 @@
+/* VoxelCraft — shell & HUD styles. No external assets/fonts. */
+
+:root {
+  --bg: #10141c;
+  --panel: #1b212c;
+  --panel-border: #2c3544;
+  --field: #11161f;
+  --text: #e8ecf2;
+  --muted: #8b94a5;
+  --accent: #5dbb46;
+  --accent-dark: #36771f;
+  --danger: #ff6b5e;
+}
+
+* { box-sizing: border-box; }
+
+html, body { height: 100%; }
+
+body {
+  margin: 0;
+  overflow: hidden;
+  position: fixed;
+  inset: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Segoe UI", "Microsoft YaHei", "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+}
+
+#gameCanvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+  background: #87ceeb;
+}
+
+/* ---------- Menu overlay ---------- */
+
+#menu {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background-color: rgba(9, 12, 18, 0.93);
+  background-image:
+    radial-gradient(900px 480px at 50% -120px, rgba(93, 187, 70, 0.14), transparent 65%),
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: auto, 32px 32px, 32px 32px;
+}
+
+.menu-panel {
+  width: min(340px, 100%);
+  max-height: 100%;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  background: var(--panel);
+  border: 2px solid var(--panel-border);
+  border-radius: 10px;
+  padding: 26px 24px 20px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.menu-title {
+  margin: 0;
+  text-align: center;
+  font-size: 40px;
+  line-height: 1.1;
+  font-weight: 900;
+  letter-spacing: 1px;
+  color: var(--accent);
+  font-family: "Arial Black", "Segoe UI Black", "Microsoft YaHei", sans-serif;
+  text-shadow: 0 4px 0 var(--accent-dark), 0 8px 0 rgba(0, 0, 0, 0.4);
+}
+
+.menu-sub {
+  margin: 10px 0 22px;
+  text-align: center;
+  font-size: 13px;
+  letter-spacing: 3px;
+  color: var(--muted);
+}
+
+/* Two pages inside the panel; ui.js toggles .active (exactly one visible). */
+.menu-page { display: none; }
+.menu-page.active { display: block; }
+
+.hidden { display: none !important; }
+
+.page-heading {
+  margin: 0 0 10px;
+  font-size: 13px;
+  letter-spacing: 1px;
+  color: var(--muted);
+}
+
+.menu-panel input {
+  width: 100%;
+  padding: 12px 14px;
+  font-size: 16px; /* >= 16px prevents iOS focus zoom */
+  font-family: inherit;
+  color: var(--text);
+  background: var(--field);
+  border: 2px solid var(--panel-border);
+  border-radius: 6px;
+  outline: none;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.menu-panel input:focus { border-color: var(--accent); }
+.menu-panel input::placeholder { color: #5b6473; }
+
+.btn {
+  padding: 12px 16px;
+  font-size: 16px;
+  font-weight: 700;
+  font-family: inherit;
+  color: var(--text);
+  background: #323d4f;
+  border: 0;
+  border-bottom: 4px solid #1d2430;
+  border-radius: 6px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.btn:hover { filter: brightness(1.08); }
+.btn:active { transform: translateY(2px); border-bottom-width: 2px; }
+
+.btn-primary {
+  width: 100%;
+  color: #0c1607;
+  background: var(--accent);
+  border-bottom-color: var(--accent-dark);
+}
+
+.btn-small {
+  min-height: 40px;
+  padding: 8px 12px;
+  font-size: 13px;
+  border-bottom-width: 3px;
+}
+
+.btn-danger {
+  width: 100%;
+  margin-top: 8px;
+  color: #ffd9d4;
+  background: #7d342c;
+  border-bottom-color: #4f201b;
+}
+
+/* ---------- Profile page: character cards ---------- */
+
+#charList {
+  display: grid;
+  /* minmax(0, 1fr), not bare 1fr: a long nowrap .char-name would otherwise
+     set the track's auto minimum to the full text width and overflow. */
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.char-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 10px 8px 8px;
+  background: var(--field);
+  border: 2px solid var(--panel-border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.char-card:hover { border-color: var(--accent); }
+.char-card:active { background: rgba(93, 187, 70, 0.18); }
+.char-card.current { border-color: var(--accent); }
+
+.char-card canvas {
+  width: 32px;
+  height: 48px;
+  image-rendering: pixelated;
+}
+
+.char-name {
+  max-width: 100%;
+  font-size: 14px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.char-edit-btn {
+  width: 100%;
+  min-height: 40px;
+  padding: 6px 8px;
+  font-size: 13px;
+  font-weight: 700;
+  font-family: inherit;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--panel-border);
+  border-radius: 5px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.char-edit-btn:hover { color: var(--text); background: rgba(255, 255, 255, 0.10); }
+
+.char-empty {
+  grid-column: 1 / -1;
+  padding: 18px 8px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--muted);
+  background: var(--field);
+  border: 2px solid var(--panel-border);
+  border-radius: 8px;
+}
+
+/* ---------- Profile page: character editor ---------- */
+
+#charEditor { display: none; }
+#charEditor.show { display: block; }
+
+#charNameInput { margin-bottom: 12px; }
+
+.swatch-label {
+  margin: 0 0 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.swatch-row {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 4px;
+  margin: 0 0 12px;
+}
+
+.swatch {
+  height: 40px;
+  padding: 0;
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  border-radius: 5px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.swatch.selected {
+  border-color: #fff;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.35);
+}
+
+.preview-wrap {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 14px;
+}
+
+#charPreview {
+  width: 96px;
+  height: 144px;
+  image-rendering: pixelated;
+  background: var(--field);
+  border: 2px solid var(--panel-border);
+  border-radius: 6px;
+}
+
+.editor-actions { display: flex; gap: 8px; }
+.editor-actions .btn-primary { flex: 1; width: auto; min-width: 0; }
+.editor-actions .btn { flex-shrink: 0; }
+
+/* ---------- Lobby page ---------- */
+
+/* Connection status + server address (lobby header block). */
+.conn-block { margin-bottom: 12px; }
+
+#connStatus {
+  min-height: 16px;
+  margin: 0 0 6px;
+  font-size: 12px;
+  line-height: 1.3;
+  color: var(--muted);
+}
+
+#connStatus.ok { color: var(--accent); }
+#connStatus.bad { color: var(--danger); }
+
+.menu-panel .server-input {
+  font-size: 12px;
+  padding: 8px 10px;
+  opacity: 0.75;
+}
+
+.active-char-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+#activeCharLabel {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Room-name input + go button share one row. */
+.go-row { display: flex; gap: 8px; }
+.go-row #roomNameInput { flex: 1; min-width: 0; }
+.go-row .btn-primary { width: auto; flex-shrink: 0; }
+
+/* "Not found — create it?" prompt, hidden until a lookup misses. */
+#createPrompt {
+  display: none;
+  margin-top: 10px;
+  padding: 12px;
+  background: rgba(93, 187, 70, 0.10);
+  border: 2px solid rgba(93, 187, 70, 0.45);
+  border-radius: 8px;
+}
+
+#createPrompt.show { display: block; }
+
+#createPromptText {
+  margin: 0 0 10px;
+  font-size: 14px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.create-actions { display: flex; gap: 8px; }
+.create-actions .btn-primary { flex: 1; width: auto; min-width: 0; }
+
+.public-toggle {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  background: var(--field);
+  border: 2px solid var(--panel-border);
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.menu-panel .public-toggle input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+/* Public room list. */
+.room-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 16px 0 6px;
+  font-size: 13px;
+  letter-spacing: 1px;
+  color: var(--muted);
+}
+
+#historyList,
+#roomList {
+  max-height: 200px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  background: var(--field);
+  border: 2px solid var(--panel-border);
+  border-radius: 6px;
+}
+
+/* History (我的足迹) sits above the public list — cap it shorter. */
+#historyList { max-height: 148px; }
+
+.room-row {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 2px 12px;
+  font-size: 14px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.room-row:last-child { border-bottom: 0; }
+.room-row:hover { background: rgba(255, 255, 255, 0.06); }
+.room-row:active { background: rgba(93, 187, 70, 0.18); }
+
+/* Long names ellipsize; the status (" · N人" / " · 不在线") never truncates,
+   so a 16-char name + 不在线 + × still fits a 360px viewport. */
+.room-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.room-own { color: #f1c40f; } /* rooms this player created (host history) */
+
+.room-status {
+  flex-shrink: 0;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+/* History-row delete: >=40px touch target pushed to the row's right edge
+   (negative margin bleeds into the row padding to keep the visual size). */
+.room-del {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  margin: 0 -8px 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-size: 20px;
+  line-height: 1;
+  font-family: inherit;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.room-del:hover { color: var(--danger); background: rgba(255, 255, 255, 0.08); }
+.room-del:active { color: var(--danger); background: rgba(255, 107, 94, 0.22); }
+
+.room-empty {
+  padding: 18px 12px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+#menuError {
+  min-height: 20px;
+  margin: 14px 0 0;
+  text-align: center;
+  font-size: 14px;
+  color: var(--danger);
+}
+
+/* ---------- HUD ---------- */
+
+#hud {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: none; /* ui.js shows it after joining */
+  pointer-events: none;
+}
+
+#crosshair {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 22px;
+  height: 22px;
+  transform: translate(-50%, -50%);
+  mix-blend-mode: difference;
+}
+
+#crosshair::before,
+#crosshair::after {
+  content: "";
+  position: absolute;
+  background: #fff;
+}
+
+#crosshair::before { left: 50%; top: 0; width: 2px; height: 100%; margin-left: -1px; }
+#crosshair::after  { top: 50%; left: 0; height: 2px; width: 100%; margin-top: -1px; }
+
+#roomLabel {
+  position: absolute;
+  top: calc(10px + env(safe-area-inset-top));
+  left: calc(12px + env(safe-area-inset-left));
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--text);
+  background: rgba(10, 13, 18, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
+  max-width: 60vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#exitBtn {
+  position: absolute;
+  top: calc(8px + env(safe-area-inset-top));
+  right: calc(10px + env(safe-area-inset-right));
+  min-width: 44px;
+  min-height: 40px;
+  padding: 8px 14px;
+  font-size: 14px;
+  font-weight: 700;
+  font-family: inherit;
+  letter-spacing: 1px;
+  color: var(--text);
+  background: rgba(10, 13, 18, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
+  pointer-events: auto;
+  touch-action: manipulation;
+  cursor: pointer;
+}
+
+#exitBtn:hover { background: rgba(10, 13, 18, 0.75); }
+#exitBtn:active {
+  background: rgba(255, 107, 94, 0.35);
+  border-color: rgba(255, 107, 94, 0.6);
+}
+
+#hotbar {
+  position: absolute;
+  left: 50%;
+  bottom: calc(10px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  display: flex;
+  gap: 4px;
+  padding: 5px;
+  background: rgba(10, 13, 18, 0.6);
+  border: 2px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.hotbar-slot {
+  position: relative;
+  width: 42px;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.35);
+  border: 2px solid rgba(255, 255, 255, 0.22);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.hotbar-slot img {
+  width: 32px;
+  height: 32px;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+
+.hotbar-slot .slot-num {
+  position: absolute;
+  top: 0;
+  left: 3px;
+  font-size: 9px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.65);
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.8);
+}
+
+.hotbar-slot.selected {
+  border-color: #fff;
+  background: rgba(255, 255, 255, 0.14);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.35), 0 0 10px rgba(255, 255, 255, 0.25);
+}
+
+/* ---------- Touch controls (shown by controls-touch.js) ---------- */
+
+#touchUI {
+  position: fixed;
+  inset: 0;
+  z-index: 15;
+  display: none; /* shown only when touch controls init */
+  pointer-events: none;
+}
+
+/* Joystick is a passive visual: touches pass through to the look/move layer. */
+#joystick {
+  position: absolute;
+  left: calc(24px + env(safe-area-inset-left));
+  bottom: calc(28px + env(safe-area-inset-bottom));
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  pointer-events: none;
+}
+
+#joyKnob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 50px;
+  height: 50px;
+  margin: -25px 0 0 -25px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.35);
+  border: 2px solid rgba(255, 255, 255, 0.5);
+  pointer-events: none;
+}
+
+#jumpBtn {
+  position: absolute;
+  right: calc(24px + env(safe-area-inset-right));
+  bottom: calc(40px + env(safe-area-inset-bottom));
+  width: 72px;
+  height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 900;
+  color: rgba(255, 255, 255, 0.9);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+  background: rgba(255, 255, 255, 0.12);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+#jumpBtn:active {
+  background: rgba(255, 255, 255, 0.28);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+/* ---------- Toasts ---------- */
+
+#toast {
+  position: fixed;
+  top: calc(14px + env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.toast-msg {
+  max-width: 80vw;
+  padding: 8px 14px;
+  font-size: 14px;
+  color: var(--text);
+  background: rgba(10, 13, 18, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  animation: toast-in 0.18s ease-out;
+  transition: opacity 0.3s;
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(-8px); }
+}
+
+/* ---------- Coarse-pointer sizing ---------- */
+
+@media (pointer: coarse) {
+  .hotbar-slot { width: 48px; height: 48px; }
+  .hotbar-slot img { width: 36px; height: 36px; }
+  .hotbar-slot .slot-num { display: none; }
+  #jumpBtn { width: 80px; height: 80px; }
+}
+
+/* Portrait phones & narrow windows: shrink the hotbar so all 8 slots fit a
+   360px viewport (8x40 + 7x2 gap + 10 pad + 4 border = 348px) and lift the
+   jump button above the hotbar band so it cannot steal taps from slots 7-8. */
+@media (pointer: coarse) and (orientation: portrait), (max-width: 480px) {
+  #hotbar { gap: 2px; }
+  .hotbar-slot { width: 40px; height: 40px; }
+  .hotbar-slot img { width: 32px; height: 32px; }
+  #jumpBtn { bottom: calc(110px + env(safe-area-inset-bottom)); }
+}
+
+/* Narrow phones: trim panel padding so 8 swatches per row keep usable size. */
+@media (max-width: 380px) {
+  .menu-panel { padding: 22px 14px 16px; }
+}
+
+/* Short viewports (small phones, landscape): keep the whole menu reachable
+   without relying on panel scroll. */
+@media (max-height: 720px) {
+  .menu-title {
+    font-size: 32px;
+    text-shadow: 0 3px 0 var(--accent-dark), 0 6px 0 rgba(0, 0, 0, 0.4);
+  }
+  .menu-sub { margin: 8px 0 14px; }
+  #roomList { max-height: 132px; }
+  #historyList { max-height: 100px; }
+  #charPreview { width: 72px; height: 108px; }
+  .preview-wrap { margin-bottom: 10px; }
+}

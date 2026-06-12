@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <title>VoxelCraft</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <canvas id="gameCanvas"></canvas>
+
+  <div id="hud">
+    <div id="crosshair"></div>
+    <div id="roomLabel"></div>
+    <button id="exitBtn" type="button">退出</button>
+    <div id="hotbar"></div>
+  </div>
+
+  <div id="touchUI">
+    <div id="joystick"><div id="joyKnob"></div></div>
+    <div id="jumpBtn">跳</div>
+  </div>
+
+  <div id="toast"></div>
+
+  <div id="menu">
+    <div class="menu-panel">
+      <h1 class="menu-title">VoxelCraft</h1>
+      <p class="menu-sub">多人在线方块世界</p>
+
+      <!-- Page 1: characters (profile) -->
+      <section id="profilePage" class="menu-page">
+        <div id="charPicker">
+          <p class="page-heading">选择人物</p>
+          <div id="charList"></div>
+          <button id="newCharBtn" class="btn btn-primary" type="button">新建人物</button>
+        </div>
+
+        <div id="charEditor">
+          <p id="charEditorTitle" class="page-heading"></p>
+          <input id="charNameInput" type="text" placeholder="你的名字" maxlength="16" autocomplete="off" spellcheck="false">
+          <p class="swatch-label">上衣颜色</p>
+          <div id="shirtSwatches" class="swatch-row"></div>
+          <p class="swatch-label">裤子颜色</p>
+          <div id="pantsSwatches" class="swatch-row"></div>
+          <div class="preview-wrap"><canvas id="charPreview" width="96" height="144"></canvas></div>
+          <div class="editor-actions">
+            <button id="saveCharBtn" class="btn btn-primary" type="button">保存</button>
+            <button id="cancelCharBtn" class="btn" type="button">取消</button>
+          </div>
+          <button id="deleteCharBtn" class="btn btn-danger hidden" type="button">删除人物</button>
+        </div>
+      </section>
+
+      <!-- Page 2: lobby (rooms) -->
+      <section id="lobbyPage" class="menu-page">
+        <div class="conn-block">
+          <p id="connStatus"></p>
+          <input id="serverInput" type="text" class="server-input" placeholder="服务器地址（留空 = 本站）" autocomplete="off" autocapitalize="off" spellcheck="false">
+        </div>
+
+        <div class="active-char-row">
+          <span id="activeCharLabel"></span>
+          <button id="switchCharBtn" class="btn btn-small" type="button">换人物</button>
+        </div>
+
+        <div class="go-row">
+          <!-- No maxlength: the relay rule is 1-16 CODE POINTS, but HTML
+               maxlength counts UTF-16 units and would truncate astral chars
+               (emoji/CJK-ext) in server-valid names. ui.js validates instead. -->
+          <input id="roomNameInput" type="text" placeholder="房间名（留空 = 随机新房间）" autocomplete="off" spellcheck="false">
+          <button id="goBtn" class="btn btn-primary" type="button">进入房间</button>
+        </div>
+
+        <div id="createPrompt">
+          <p id="createPromptText"></p>
+          <div class="create-actions">
+            <label class="public-toggle" for="publicToggle">
+              <input id="publicToggle" type="checkbox" checked>公开房间
+            </label>
+            <button id="confirmCreateBtn" class="btn btn-primary" type="button">创建这个房间</button>
+          </div>
+        </div>
+
+        <!-- History (我的足迹): local vc-history, hidden while empty. -->
+        <div id="historyHeader" class="room-list-header hidden">
+          <span>我的足迹</span>
+        </div>
+        <div id="historyList" class="hidden"></div>
+
+        <div class="room-list-header">
+          <span>其他公开房间</span>
+          <button id="refreshBtn" class="btn btn-small" type="button">刷新</button>
+        </div>
+        <div id="roomList"></div>
+
+        <p id="menuError"></p>
+      </section>
+    </div>
+  </div>
+
+  <script src="app-config.js"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
