@@ -1018,8 +1018,11 @@ function startGame(msg) {
   // Pure sim kernel: spawn a couple of skittish fowl near spawn (placeholder 小人
   // model — all creatures render as the avatar until real models land, 显现可换数据).
   simDriver = new SimDriver(renderer, world);
-  simDriver.spawn(3, 0, 12.5, 11.5, 0x1a2b3c);  // protoId 3=fowl_small, packId 0=skittish_flee
-  simDriver.spawn(3, 0, 5.5, 13.5, 0x4d5e6f);
+  // Spawn a MIX by string CODE (generality: each is just a registry entry — distinct
+  // speed/skittishness from data alone, zero kernel change). All render as 小人 (占位).
+  simDriver.spawn('fowl_small', 'skittish_flee', 12.5, 11.5, 0x1a2b3c);
+  simDriver.spawn('rabbit',     'jumpy_flee',     5.5, 13.5, 0x4d5e6f);
+  simDriver.spawn('golem',      'fearless',      14.5,  6.5, 0x778899);
 
   playing = true;
   lastTime = performance.now();

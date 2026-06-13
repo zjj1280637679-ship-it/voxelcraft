@@ -6,8 +6,8 @@
 
 import { hash2 } from '../noise.js';
 import { DT_FIXED, MAX_CATCHUP_TICKS } from './constants-sim.js';
-import { ACTION_PACKS } from './actionpacks.js';
-import { PROTOTYPES } from './prototypes.js';
+import { packByKey } from './actionpacks.js';
+import { protoByKey } from './prototypes.js';
 
 // 8 baked unit directions (f64 literals = identical on every device). Movement picks
 // one of these instead of computing sin/cos at runtime.
@@ -20,11 +20,11 @@ export function makeState() {
   return { acc: 0, tick: 0, ents: new Map() };
 }
 
-export function makeEntity(id, protoId, packId, x, y, z, seed) {
+export function makeEntity(id, protoKey, packKey, x, y, z, seed) {
   return {
-    id, m: { p: protoId, a: packId },   // manifest: refs back into the registries
+    id, m: { p: protoKey, a: packKey },  // manifest: string CODES into the registries
     x, y, z, dir: 0,                     // dynamic state (evolved each tick)
-    hp: PROTOTYPES[protoId].hp,
+    hp: protoByKey(protoKey).hp,
     st: 0, stT: 0,                       // action-pack state index + ticks-in-state
     seed: seed >>> 0,                    // deterministic RNG seed (travels in snapshot)
   };
@@ -46,7 +46,7 @@ function stepFixed(state, inputs, dt, out) {
   const ids = [...state.ents.keys()].sort((a, b) => a - b);
   for (let k = 0; k < ids.length; k++) {
     const e = state.ents.get(ids[k]);
-    const pack = ACTION_PACKS[e.m.a];
+    const pack = packByKey(e.m.a);
     const near = nearest(e, players);
     const sense = pack.states[e.st].sense;
     const isNear = near !== null && near.d2 < sense * sense;

@@ -6,6 +6,7 @@
 // but never kills the render loop.
 
 import { makeState, makeEntity, reduce } from './kernel.js';
+import { protoByKey } from './prototypes.js';
 
 // Distinct placeholder skin so creatures read as "not a player" for now.
 const ENT_SKIN = { b: 2, t: 4, p: 6, k: 5 };
@@ -19,13 +20,14 @@ export class SimDriver {
     this._n = 0;
   }
 
-  // protoId/packId index the registries; (x,z) world position; seed = deterministic RNG.
-  spawn(protoId, packId, x, z, seed, name = '小鸡') {
+  // protoKey/packKey = string CODES into the registries; (x,z) world pos; seed = RNG.
+  // Display name defaults to the prototype's bound name (a name is just bound data).
+  spawn(protoKey, packKey, x, z, seed, name) {
     const id = ++this._n;
     let y = 40;
     try { y = this.world.surfaceHeight(Math.floor(x), Math.floor(z)); } catch (_) { /* unloaded */ }
-    this.state.ents.set(id, makeEntity(id, protoId, packId, x, y, z, seed));
-    this.renderer.addPlayer('e' + id, name, ENT_SKIN);
+    this.state.ents.set(id, makeEntity(id, protoKey, packKey, x, y, z, seed));
+    this.renderer.addPlayer('e' + id, name || protoByKey(protoKey).name || protoKey, ENT_SKIN);
     return id;
   }
 
