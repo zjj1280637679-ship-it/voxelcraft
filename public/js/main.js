@@ -13,6 +13,7 @@ import {
   buildHotbar, setHotbarSelection, onHotbarTap, toast, backToMenu,
 } from './ui.js';
 import { World } from './world.js';
+import { SimDriver } from './sim/sim-driver.js';
 import { Renderer } from './renderer.js';
 import { Player } from './player.js';
 import { initDesktopControls } from './controls-desktop.js';
@@ -34,6 +35,7 @@ let playing = false;
 let controlsInited = false;
 let world = null;
 let player = null;
+let simDriver = null;        // pure sim kernel ↔ shell bridge (creatures); null when not in a game
 let roomCode = '';           // the room's display name
 let myId = -1;
 let myName = '玩家';          // active character (ui.js owns storage/selection)
@@ -1013,6 +1015,12 @@ function startGame(msg) {
     renderer.updatePlayer(p.id, p.p, ry, 0);
   }
 
+  // Pure sim kernel: spawn a couple of skittish fowl near spawn (placeholder 小人
+  // model — all creatures render as the avatar until real models land, 显现可换数据).
+  simDriver = new SimDriver(renderer, world);
+  simDriver.spawn(3, 0, 12.5, 11.5, 0x1a2b3c);  // protoId 3=fowl_small, packId 0=skittish_flee
+  simDriver.spawn(3, 0, 5.5, 13.5, 0x4d5e6f);
+
   playing = true;
   lastTime = performance.now();
   lastMoveSent = 0;
@@ -1050,6 +1058,7 @@ function stopGame() {
   lastPcz = null;
   for (const id of remoteInfo.keys()) renderer.removePlayer(id);
   remoteInfo.clear();
+  if (simDriver) { simDriver.clear(); simDriver = null; }
   player = null;
   world = null;
   roomCode = '';
@@ -1071,6 +1080,7 @@ function loop(now) {
   if (touchTick) touchTick(now);
 
   player.update(dt);
+  if (simDriver) simDriver.tick(dt, player.pos);
   const px = player.pos.x;
   const py = player.pos.y;
   const pz = player.pos.z;
@@ -1227,6 +1237,8 @@ window.__vc = {
   get hostRoom() { return hostRoom; },
   get remoteInfo() { return remoteInfo; },
   get net() { return net; },
+  get simDriver() { return simDriver; },   // pure sim kernel bridge (creatures)
+  get renderer() { return renderer; },     // for debugging avatar/scene state
   // Local world-save entry: live session snapshot in the vc-worlds format.
   get worldSave() {
     return world && roomCode
