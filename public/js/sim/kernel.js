@@ -24,7 +24,7 @@ export function makeEntity(id, protoId, packId, x, y, z, seed) {
   return {
     id, m: { p: protoId, a: packId },   // manifest: refs back into the registries
     x, y, z, dir: 0,                     // dynamic state (evolved each tick)
-    hp: PROTOTYPES[protoId].maxHp,
+    hp: PROTOTYPES[protoId].hp,
     st: 0, stT: 0,                       // action-pack state index + ticks-in-state
     seed: seed >>> 0,                    // deterministic RNG seed (travels in snapshot)
   };
