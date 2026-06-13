@@ -37,6 +37,14 @@ export const ACTION_PACKS = [
     transitions: [],
     budget: { aggression: 0, mobility: 2, sense: 0, complexity: 1 },
   },
+  {
+    packId: 3, key: 'hop_in_place', // 原地小范围蹦跳: holds anchor + vertical bob
+    states: [
+      { id: 0, name: 'hop', prim: 'hop', speed: 1, sense: 0 },
+    ],
+    transitions: [],
+    budget: { aggression: 0, mobility: 1, sense: 0, complexity: 1 },
+  },
 ];
 
 export const PACK_BY_KEY = new Map(ACTION_PACKS.map((p) => [p.key, p]));

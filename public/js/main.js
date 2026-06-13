@@ -14,6 +14,7 @@ import {
 } from './ui.js';
 import { World } from './world.js';
 import { SimDriver } from './sim/sim-driver.js';
+import { perceive, buildTestArena } from './sim/perceive.js';
 import { Renderer } from './renderer.js';
 import { Player } from './player.js';
 import { initDesktopControls } from './controls-desktop.js';
@@ -1242,6 +1243,8 @@ window.__vc = {
   get net() { return net; },
   get simDriver() { return simDriver; },   // pure sim kernel bridge (creatures)
   get renderer() { return renderer; },     // for debugging avatar/scene state
+  perceive(r) { return perceive({ world, simDriver, player, radius: r || 10 }); },
+  testArena() { return buildTestArena({ world, simDriver, renderer, player, spawn: (...a) => simDriver.spawn(...a) }); },
   // Local world-save entry: live session snapshot in the vc-worlds format.
   get worldSave() {
     return world && roomCode

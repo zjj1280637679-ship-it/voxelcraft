@@ -18,6 +18,7 @@ export const FACE_TILES = {
   [BLOCK.LEAVES]: [7, 7, 7, 7, 7, 7],
   [BLOCK.PLANK]:  [8, 8, 8, 8, 8, 8],
   [BLOCK.BRICK]:  [9, 9, 9, 9, 9, 9],
+  [BLOCK.DIAMOND]:[10, 10, 10, 10, 10, 10],
 };
 
 // Small deterministic PRNG so the atlas looks identical on every client.
@@ -166,6 +167,20 @@ function paintBrick(ctx, rand) {
   }
 }
 
+function paintDiamond(ctx, rand) {
+  ctx.fillStyle = '#39c6d6'; // bright cyan base
+  ctx.fillRect(0, 0, TILE, TILE);
+  speckle(ctx, rand, ['#2fb3c2', '#5fd9e6', '#27a0ad', '#7fe6f0'], 0.4);
+  // a few light facet glints
+  ctx.fillStyle = '#d9fbff';
+  for (let i = 0; i < 6; i++) {
+    const x = (rand() * 15) | 0;
+    const y = (rand() * 15) | 0;
+    ctx.fillRect(x, y, 1, 1);
+    if (rand() < 0.5) ctx.fillRect(x + 1, y, 1, 1);
+  }
+}
+
 const PAINTERS = [
   paintGrassTop,   // 0
   paintGrassSide,  // 1
@@ -177,6 +192,7 @@ const PAINTERS = [
   paintLeaves,     // 7
   paintPlank,      // 8
   paintBrick,      // 9
+  paintDiamond,    // 10
 ];
 
 export function buildAtlas() {

@@ -24,6 +24,7 @@ export function makeEntity(id, protoKey, packKey, x, y, z, seed) {
   return {
     id, m: { p: protoKey, a: packKey },  // manifest: string CODES into the registries
     x, y, z, dir: 0,                     // dynamic state (evolved each tick)
+    ax: x, az: z, bob: 0,                // hop anchor + vertical bob phase (render reads bob)
     hp: protoByKey(protoKey).hp,
     st: 0, stT: 0,                       // action-pack state index + ticks-in-state
     seed: seed >>> 0,                    // deterministic RNG seed (travels in snapshot)
@@ -64,6 +65,7 @@ function stepFixed(state, inputs, dt, out) {
     // run the current state's prim (kernel-fixed behaviour; data only tunes speed/sense)
     const cur = pack.states[e.st];
     let vx = 0, vz = 0;
+    e.bob = 0;
     if (cur.prim === 'wander') {
       if (e.stT % 12 === 0) e.dir = (hash2(e.id, state.tick, e.seed) * 8) | 0; // deterministic heading
       const d = DIRS[e.dir & 7]; vx = d[0] * cur.speed; vz = d[1] * cur.speed;
@@ -75,6 +77,12 @@ function stepFixed(state, inputs, dt, out) {
         if (dot > bestDot) { bestDot = dot; bi = i; }
       }
       e.dir = bi; const d = DIRS[bi]; vx = d[0] * cur.speed; vz = d[1] * cur.speed;
+    } else if (cur.prim === 'hop') {
+      // 原地小范围蹦跳: hold the anchor (ease back, never drifts) + a deterministic
+      // triangle bob the renderer lifts the avatar by. speed tunes bounciness.
+      const ph = e.stT % 12;
+      e.bob = (ph < 6 ? ph : 12 - ph) / 6 * (cur.speed || 1);  // 0→1→0 hop height
+      vx = (e.ax - e.x) * 2; vz = (e.az - e.z) * 2;
     } // idle / chase → stand still (chase prim is a stub for a later slice)
 
     e.x += vx * dt; e.z += vz * dt; e.stT++;

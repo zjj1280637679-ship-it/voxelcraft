@@ -16,6 +16,7 @@ export const BLOCK = {
   LEAVES: 6,
   PLANK: 7,
   BRICK: 8,
+  DIAMOND: 9,   // dev static-craft segment (9..63); test-arena floor
 };
 
 // Hotbar slots (block ids, in order). Index 0..7 -> keys 1..8.

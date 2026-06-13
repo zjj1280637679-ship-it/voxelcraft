@@ -11,4 +11,4 @@ export const CUSTOM_MAX = 255;
 
 // Behaviour primitives the kernel can execute. DATA (action packs) only picks among
 // these by name + params; adding a NEW prim is the rare reviewed kernel change.
-export const PRIMS = ['idle', 'wander', 'flee', 'chase'];
+export const PRIMS = ['idle', 'wander', 'flee', 'chase', 'hop'];

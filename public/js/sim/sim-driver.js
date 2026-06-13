@@ -40,7 +40,7 @@ export class SimDriver {
       for (const e of this.state.ents.values()) {
         let y = e.y;
         try { y = this.world.surfaceHeight(Math.floor(e.x), Math.floor(e.z)); } catch (_) { /* keep last */ }
-        this.renderer.updatePlayer('e' + e.id, [e.x, y, e.z], 0, 0);
+        this.renderer.updatePlayer('e' + e.id, [e.x, y + (e.bob || 0) * 0.6, e.z], 0, 0);
       }
     } catch (err) {
       console.error('[sim] tick error (creatures frozen, loop alive):', err);
