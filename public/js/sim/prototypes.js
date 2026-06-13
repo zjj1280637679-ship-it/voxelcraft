@@ -27,6 +27,15 @@ export const PROTOTYPES = [
     behavior: { packs: ['jumpy_flee'] }, combat: { atk: 0, def: 0 } },   // fast + very skittish
   { protoId: 6, key: 'golem',  tags: ['生物.石像', '阶.铁'], tier: 2, hp: 40, name: '石像',
     behavior: { packs: ['fearless'] }, combat: { atk: 6, def: 6 } },      // slow, ignores the player
+
+  // —— the PLAYER is the SAME substrate (§0.7 万物皆对象): an object whose behavior
+  //    facet is replaced by INPUT-CONTROL (the shell drives it; the kernel never ticks
+  //    it). Its combat + tags resolve through THIS registry exactly like a dragon's ⇒
+  //    变身术 = rebinding which prototype the player's identity-core points at. No
+  //    player-specific code path — the boss and the player are one shape, differing by
+  //    which row of this table they bind to.
+  { protoId: 7, key: 'player', tags: ['生物.人', '阶.木'], tier: 0, hp: 20, name: '玩家',
+    combat: { atk: 1, def: 0 } },
 ];
 
 export const PROTO_COUNT = PROTOTYPES.length;

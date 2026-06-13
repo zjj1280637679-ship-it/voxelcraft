@@ -4,7 +4,7 @@
 // fresh, runs the budgeted game loop, handles block interaction and host
 // migration.
 
-import { CHUNK, HEIGHT, BLOCK, HOTBAR, PLAYER, chunkKey } from './constants.js';
+import { CHUNK, HEIGHT, BLOCK, HOTBAR, PLAYER, PALETTE, SKIN_TONES, BODIES, chunkKey } from './constants.js';
 import {
   initUi, bindExit, getActiveChar, ensureCharacter, getHistory, getLastRoom,
   setLastRoom, getWorldSave, putWorldSave, normRoomKey, setEntryInfo,
@@ -15,6 +15,9 @@ import {
 import { World } from './world.js';
 import { SimDriver } from './sim/sim-driver.js';
 import { perceive, buildTestArena } from './sim/perceive.js';
+import { PROTO_BY_KEY } from './sim/prototypes.js';
+import { effect } from './sim/effect.js';
+import { WEAPONS } from './sim/modifiers.js';
 import { Renderer } from './renderer.js';
 import { Player } from './player.js';
 import { initDesktopControls } from './controls-desktop.js';
@@ -998,6 +1001,12 @@ function startGame(msg) {
   console.log('[vc] chunk-gen complete:', meshed.size, 'chunks');
 
   player = new Player(world, { x: 8.5, y: world.surfaceHeight(8, 8) + 1, z: 8.5 });
+  // §0.7: the player is an object bound to the 'player' prototype. 变身术 rebinds this
+  // to a creature/boss code; the uid tag travels with the identity-core so player-bane
+  // still finds "you" through any form (用代号不用名字,防同义字乌龙).
+  player.form = 'player';
+  player.uidTag = '玩家.' + (myId >= 0 ? myId : 'me');
+  player.baseSkin = { ...mySkin };
 
   hideMenu();
   stopBg(); // menubg never runs (loop + GL) behind a live game session
@@ -1231,6 +1240,75 @@ function blockIntersectsPlayer(bx, by, bz) {
 }
 
 // Debug handle for devtools and scripted testing — not used by game code.
+// ---- perception / 变身术 play helpers (exposed on __vc; drive the game by code) ----
+let vcMarks = null;   // default mark selector used by __vc.perceive() when none passed
+
+// A form's placeholder avatar skin, derived from its protoId (valid by construction —
+// real models land later, 显现可换数据). The 'player' form restores your own skin.
+function skinForForm(proto) {
+  const id = (proto.protoId >>> 0) + 1;
+  return cleanSkin({
+    b: id % BODIES.length,
+    t: (id * 3 + 2) % PALETTE.length,
+    p: (id * 5 + 1) % PALETTE.length,
+    k: id % SKIN_TONES.length,
+  });
+}
+
+function rebroadcastSkin() {
+  // best-effort: let other players see the new form (member→host hello re-announces skin)
+  try { if (mode === 'member' && net) net.sendToHost({ t: 'hello', name: myName, skin: mySkin }); } catch (_) {}
+}
+
+// 变身术: rebind the player's identity to another prototype (boss / creature). No
+// player-special code — the same registry the kernel reads for a dragon. Display
+// (skin) is bound data and swaps with zero kernel change.
+function transformPlayer(formKey) {
+  if (!player) return '未进入游戏';
+  const proto = PROTO_BY_KEY.get(formKey);
+  if (!proto) return '未知形态: ' + formKey + ' — 可用: ' + [...PROTO_BY_KEY.keys()].join(', ');
+  player.form = formKey;
+  mySkin = formKey === 'player' ? cleanSkin(player.baseSkin) : skinForForm(proto);
+  rebroadcastSkin();
+  const tags = proto.tags.concat(player.uidTag ? [player.uidTag] : []);
+  return `🪄 变身 → ${proto.name}(${formKey}) [${tags.join(',')}] hp上限${proto.hp}`;
+}
+
+// Nudge the player across the plane by a compass direction (drive navigation by reading
+// perceive() → walk → perceive). Diagonals move one block per axis.
+const COMPASS = { N: [0, -1], S: [0, 1], E: [1, 0], W: [-1, 0], NE: [1, -1], NW: [-1, -1], SE: [1, 1], SW: [-1, 1] };
+function walkPlayer(compass, blocks) {
+  if (!player) return '未进入游戏';
+  const d = COMPASS[String(compass || '').toUpperCase()];
+  if (!d) return '方向? 用 N/S/E/W/NE/NW/SE/SW';
+  const n = Number(blocks) || 1;
+  player.pos.x += d[0] * n;
+  player.pos.z += d[1] * n;
+  return `走 ${String(compass).toUpperCase()} ${n} → @(${player.pos.x.toFixed(1)},${player.pos.z.toFixed(1)})`;
+}
+
+// Run the EffectResolver for a weapon vs a target (self form / proto code / entity id).
+// Proves the data path: who you ARE (your form's tags) decides what a weapon does to you.
+function computeHit(weaponKey, target) {
+  const w = WEAPONS[weaponKey] || WEAPONS.fist;
+  let tags = [], label = '?';
+  if (target == null || target === 'self') {
+    const f = player && player.form ? PROTO_BY_KEY.get(player.form) : null;
+    tags = f ? f.tags.concat(player.uidTag ? [player.uidTag] : []) : [];
+    label = '你(' + (f ? f.name : '?') + ')';
+  } else if (typeof target === 'number') {
+    const e = simDriver && simDriver.state.ents.get(target);
+    const f = e && PROTO_BY_KEY.get(e.m.p);
+    tags = f ? f.tags : []; label = f ? f.name : '#' + target;
+  } else {
+    const f = PROTO_BY_KEY.get(target);
+    tags = f ? f.tags : []; label = f ? f.name : String(target);
+  }
+  const v = effect(w.base, w.mods, tags);
+  const kind = v > 0 ? `伤害 ${v.toFixed(1)}` : (v < 0 ? `回血 ${(-v).toFixed(1)} (被按摩)` : '免疫 0');
+  return `${w.name}→${label}[${tags.join(',')}]: ${kind}`;
+}
+
 window.__vc = {
   get world() { return world; },
   get player() { return player; },
@@ -1243,7 +1321,17 @@ window.__vc = {
   get net() { return net; },
   get simDriver() { return simDriver; },   // pure sim kernel bridge (creatures)
   get renderer() { return renderer; },     // for debugging avatar/scene state
-  perceive(r) { return perceive({ world, simDriver, player, radius: r || 10 }); },
+  // perceive(11)  or  perceive({radius, step, marks})  — `marks` overrides the default
+  // set from __vc.mark(...). step = 增减像素(blocks/char). marks = 'all' | 'golem' | [ids] | fn.
+  perceive(opts) {
+    const o = (typeof opts === 'number') ? { radius: opts } : (opts || {});
+    return perceive({ world, simDriver, player, marks: vcMarks, radius: 10, ...o });
+  },
+  mark(filter) { vcMarks = filter ?? null; return '标记选择器 = ' + JSON.stringify(filter ?? null); },
+  transform: transformPlayer,                  // 变身术
+  forms() { return [...PROTO_BY_KEY.keys()]; }, // 可变身的形态代号
+  walk: walkPlayer,                            // 用感知器导航:perceive → walk → perceive
+  hit: computeHit,                            // EffectResolver 试算:hit('wood_shovel','self')
   testArena() { return buildTestArena({ world, simDriver, renderer, player, spawn: (...a) => simDriver.spawn(...a) }); },
   // Local world-save entry: live session snapshot in the vc-worlds format.
   get worldSave() {

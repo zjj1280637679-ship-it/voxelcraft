@@ -5,6 +5,9 @@
 import { makeState, makeEntity, reduce } from './kernel.js';
 import { effect } from './effect.js';
 import { REGISTRY_HASH } from './registry-hash.js';
+import { protoByKey } from './prototypes.js';
+import { WEAPONS } from './modifiers.js';
+import { bearing } from './perceive.js';
 
 // ---- 1. determinism: one skittish fowl, wander then flee, ran twice = bit-identical ----
 function runFowl() {
@@ -57,3 +60,35 @@ show('木剑(10) 打 钻石块', effect(10, woodSword, diamond));
 show('屠龙剑(20) 打 普通生物', effect(20, dragonBane, fowl));
 show('屠龙剑(20) 打 龙', effect(20, dragonBane, dragon));
 show('治疗杖(10) 对 生物', effect(10, healWand, fowl));
+
+// ---- 4. 变身术: the player resolves through the SAME registry — who you ARE decides
+//        what a weapon does TO you. Same weapon, swap your form, opposite outcome. ----
+console.log('\n=== 4. 变身术: 同一把武器,玩家换形态 → 数据决定结果(player 与 dragon 同走 protoByKey)===');
+const uid = '玩家.zz';
+const asHuman  = protoByKey('player').tags.concat([uid]);   // 生物.人, 阶.木, 玩家.zz
+const asDragon = protoByKey('dragon').tags.concat([uid]);   // 生物.龙, 阶.钻, 玩家.zz
+const hit = (label, w, tags) => {
+  const v = effect(w.base, w.mods, tags);
+  console.log('  ' + label.padEnd(30) + ' = ' + v.toFixed(1).padStart(6)
+    + '  → ' + (v > 0 ? '伤害' : v < 0 ? '回血(被按摩)' : '免疫'));
+};
+hit('木剑 打 你(人形/阶.木)',   WEAPONS.wood_sword,  asHuman);   // 10 (no match)
+hit('木剑 打 你(龙形/阶.钻)',   WEAPONS.wood_sword,  asDragon);  // 0.5 chip
+hit('木铲 打 你(人形/阶.木)',   WEAPONS.wood_shovel, asHuman);   // 6
+hit('木铲 打 你(龙形/阶.钻)',   WEAPONS.wood_shovel, asDragon);  // -3 回血(按摩)
+// player-bane: a +50% vs the uid tag follows you THROUGH 变身 (用代号防同义字乌龙)
+const baneSword = { base: 10, mods: [{ tag: uid, val: 0.5 }] };
+hit('学过你的剑 打 你(人形)',   baneSword, asHuman);             // 15
+hit('学过你的剑 打 你(龙形)',   baneSword, asDragon);            // 15 — 变身甩不掉"你是你"
+const dragonNoUid = protoByKey('dragon').tags;                   // a wild dragon (no uid)
+hit('学过你的剑 打 野生龙(无uid)', baneSword, dragonNoUid);       // 10 — only YOU are baned
+
+// ---- 5. perception bearing: trig-free 8-way compass from a (dx,dz) offset ----
+console.log('\n=== 5. 感知器测向(trig-free 8 向罗盘, 北=−z 东=+x)===');
+const bcheck = [[0, -5, 'N'], [5, 0, 'E'], [0, 5, 'S'], [-5, 0, 'W'], [4, -4, 'NE'], [-4, 4, 'SW']];
+let bpass = true;
+for (const [dx, dz, want] of bcheck) {
+  const got = bearing(dx, dz); if (got !== want) bpass = false;
+  console.log(`  (dx=${dx},dz=${dz}) → ${got}  ${got === want ? '✓' : '✗ 期望' + want}`);
+}
+console.log('  测向: ' + (bpass ? 'PASS' : 'FAIL'));
