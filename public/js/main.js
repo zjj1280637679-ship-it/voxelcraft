@@ -82,7 +82,7 @@ const _movP = [0, 0, 0];         // scratch array for move sends (no per-frame a
 // Controls are initialized once but must keep driving the current Player
 // instance across disconnect/rejoin, so they get this stable handle. The same
 // handle doubles as HostRoom's playerRef (live .pos/.yaw for `joined`).
-const _nullInput = { f: 0, b: 0, l: 0, r: 0, jump: false };
+const _nullInput = { f: 0, b: 0, l: 0, r: 0, jump: false, down: 0, fire: false, useApple: false };
 const _nullVec = { x: 0, y: 0, z: 0 };
 const playerHandle = {
   get pos() { return player ? player.pos : _nullVec; },
@@ -1094,6 +1094,13 @@ function loop(now) {
 
   player.update(dt);
   if (simDriver) simDriver.tick(dt, player.pos);
+  // dragon-form actions: G eats the 变龙苹果 (toggle form), F breathes fire (cooldown).
+  if (player.input.useApple) { player.input.useApple = false; toast(useItem('dragon_apple')); }
+  if (fireCd > 0) fireCd -= dt;
+  if (player.input.fire && fireCd <= 0) {
+    const pf = PROTO_BY_KEY.get(player.form);
+    if (pf && pf.fire) { breatheFire(); fireCd = 0.25; }
+  }
   const px = player.pos.x;
   const py = player.pos.y;
   const pz = player.pos.z;
@@ -1268,10 +1275,68 @@ function transformPlayer(formKey) {
   const proto = PROTO_BY_KEY.get(formKey);
   if (!proto) return '未知形态: ' + formKey + ' — 可用: ' + [...PROTO_BY_KEY.keys()].join(', ');
   player.form = formKey;
+  player.fly = !!proto.fly;                    // 会飞的形态(龙)→ 关重力,进入飞行
+  if (!player.fly) { player.input.jump = false; player.input.down = 0; }
   mySkin = formKey === 'player' ? cleanSkin(player.baseSkin) : skinForForm(proto);
   rebroadcastSkin();
   const tags = proto.tags.concat(player.uidTag ? [player.uidTag] : []);
-  return `🪄 变身 → ${proto.name}(${formKey}) [${tags.join(',')}] hp上限${proto.hp}`;
+  const caps = [proto.fly ? '会飞' : null, proto.fire ? '会喷火' : null].filter(Boolean).join('·');
+  return `🪄 变身 → ${proto.name}(${formKey}) [${tags.join(',')}] hp上限${proto.hp}${caps ? ' ' + caps : ''}`;
+}
+
+// 使用物品:读 proto.use 数据决定效果(无物品专用代码)。变龙苹果 → 变身;再吃一次变回。
+function useItem(key) {
+  const proto = PROTO_BY_KEY.get(key);
+  if (!proto || !proto.use) return '该物品不可使用: ' + key;
+  if (proto.use.kind === 'transform') {
+    const target = (player && player.form === proto.use.form) ? 'player' : proto.use.form;
+    return `🍎 吃下${proto.name} → ` + transformPlayer(target);
+  }
+  return '未知使用效果: ' + proto.use.kind;
+}
+
+// nudge altitude (drive flight by code, like walk drives the plane). Needs a flying form.
+function flyPlayer(dy) {
+  if (!player) return '未进入游戏';
+  if (!player.fly) return '当前形态不会飞(先变身成龙)';
+  player.pos.y += Number(dy) || 0;
+  return `升降 ${dy} → 高度 y=${player.pos.y.toFixed(1)}`;
+}
+
+// 8 baked headings (match kernel DIRS order) for picking a projectile's launch index.
+const FIRE_DIRS = [[1, 0], [0.7071, 0.7071], [0, 1], [-0.7071, 0.7071], [-1, 0], [-0.7071, -0.7071], [0, -1], [0.7071, -0.7071]];
+let fireCd = 0;   // seconds until the dragon can breathe again
+
+// 喷火: the dragon's breath weapon. Forward cone → EffectResolver applies fire to every
+// creature in range (HP drop / kill); plus a few short-lived fire motes for the visual.
+// 火也用攻击器产伤 = 复用 effect(),无独立火系统。
+function breatheFire() {
+  if (!player || !simDriver) return '未进入游戏';
+  const proto = PROTO_BY_KEY.get(player.form);
+  const fire = proto && proto.fire;
+  if (!fire) return '当前形态不会喷火(先变身成龙)';
+  // forward horizontal heading from yaw (yaw 0 looks toward -z)
+  const fx = -Math.sin(player.yaw), fz = -Math.cos(player.yaw);
+  const px = player.pos.x, pz = player.pos.z, py = player.pos.y;
+  const R = 8, COS = 0.6;            // range 8 blocks, cone half-angle ~53°
+  const hits = [], kills = [];
+  for (const e of [...simDriver.state.ents.values()]) {
+    const ep = PROTO_BY_KEY.get(e.m.p);
+    if (!ep || ep.fly) continue;     // don't torch our own fire motes
+    const dx = e.x - px, dz = e.z - pz;
+    const d = Math.hypot(dx, dz);
+    if (d < 0.001 || d > R) continue;
+    if ((dx * fx + dz * fz) / d < COS) continue;   // outside the cone
+    const dmg = effect(fire.base, fire.mods, ep.tags);
+    e.hp = Math.round((e.hp - dmg) * 10) / 10;
+    if (e.hp <= 0) { simDriver.kill(e.id); kills.push(ep.name); }
+    else hits.push(`${ep.name}(-${dmg.toFixed(0)}→hp${e.hp})`);
+  }
+  // 1-2 visible fire motes along the nearest baked heading
+  let bi = 0, best = -Infinity;
+  for (let i = 0; i < 8; i++) { const dot = FIRE_DIRS[i][0] * fx + FIRE_DIRS[i][1] * fz; if (dot > best) { best = dot; bi = i; } }
+  for (let n = 1; n <= 2; n++) simDriver.spawnProjectile('fire', 'fire_breath', px + fx * n, py + 1, pz + fz * n, bi, 0xf1 * n);
+  return `🔥 喷火 命中${hits.length}${kills.length ? ' 烧死[' + kills.join(',') + ']' : ''}${hits.length ? ': ' + hits.join(' ') : ''}`;
 }
 
 // Nudge the player across the plane by a compass direction (drive navigation by reading
@@ -1329,8 +1394,11 @@ window.__vc = {
   },
   mark(filter) { vcMarks = filter ?? null; return '标记选择器 = ' + JSON.stringify(filter ?? null); },
   transform: transformPlayer,                  // 变身术
+  use: useItem,                               // 吃物品:use('dragon_apple') = 变身/变回
   forms() { return [...PROTO_BY_KEY.keys()]; }, // 可变身的形态代号
   walk: walkPlayer,                            // 用感知器导航:perceive → walk → perceive
+  fly: flyPlayer,                             // 龙形升降:fly(5) 上升 / fly(-3) 下降
+  breathe: breatheFire,                       // 喷火(锥形 EffectResolver 伤害 + 火焰投射物)
   hit: computeHit,                            // EffectResolver 试算:hit('wood_shovel','self')
   testArena() { return buildTestArena({ world, simDriver, renderer, player, spawn: (...a) => simDriver.spawn(...a) }); },
   // Local world-save entry: live session snapshot in the vc-worlds format.

@@ -45,6 +45,14 @@ export const ACTION_PACKS = [
     transitions: [],
     budget: { aggression: 0, mobility: 1, sense: 0, complexity: 1 },
   },
+  {
+    packId: 4, key: 'fire_breath',  // 投射物:沿 dir 直飞, ttl 帧后自销(瞬态对象 lifetime)
+    states: [
+      { id: 0, name: 'fly', prim: 'launch', speed: 9, sense: 0, ttl: 8 },
+    ],
+    transitions: [],
+    budget: { aggression: 0, mobility: 9, sense: 0, complexity: 1 },
+  },
 ];
 
 export const PACK_BY_KEY = new Map(ACTION_PACKS.map((p) => [p.key, p]));

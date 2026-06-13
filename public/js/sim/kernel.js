@@ -43,6 +43,7 @@ function nearest(e, players) {
 
 function stepFixed(state, inputs, dt, out) {
   const players = inputs.players || [];
+  const dead = [];                         // ids whose lifetime (ttl) expired this tick
   // 序 contract: iterate by sorted entity id, never Map insertion order.
   const ids = [...state.ents.keys()].sort((a, b) => a - b);
   for (let k = 0; k < ids.length; k++) {
@@ -83,10 +84,20 @@ function stepFixed(state, inputs, dt, out) {
       const ph = e.stT % 12;
       e.bob = (ph < 6 ? ph : 12 - ph) / 6 * (cur.speed || 1);  // 0→1→0 hop height
       vx = (e.ax - e.x) * 2; vz = (e.az - e.z) * 2;
+    } else if (cur.prim === 'launch') {
+      // projectile: travel along the spawn-fixed heading at speed; self-destruct when
+      // its lifetime (cur.ttl ticks) runs out (转态/lifetime — 瞬态对象自销).
+      const d = DIRS[e.dir & 7]; vx = d[0] * cur.speed; vz = d[1] * cur.speed;
     } // idle / chase → stand still (chase prim is a stub for a later slice)
 
     e.x += vx * dt; e.z += vz * dt; e.stT++;
     out.push({ t: 'ent.move', id: e.id, x: e.x, z: e.z, dir: e.dir, st: e.st });
+    if (cur.ttl && e.stT >= cur.ttl) dead.push(e.id);
+  }
+  // reap expired transients AFTER the move pass (never mutate ents mid-iteration)
+  for (let k = 0; k < dead.length; k++) {
+    state.ents.delete(dead[k]);
+    out.push({ t: 'ent.die', id: dead[k] });
   }
   state.tick++;
 }

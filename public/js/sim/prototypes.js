@@ -18,8 +18,12 @@ export const PROTOTYPES = [
   // —— behavior/combat filled ⇒ "creature" (derived). Same shape, no new type. ——
   { protoId: 3, key: 'fowl_small', tags: ['生物.禽', '阶.木'], tier: 0, hp: 8, name: '小鸡',
     behavior: { packs: ['skittish_flee'] }, combat: { atk: 0, def: 0 } },
+  // 巨龙:会飞(fly 分面 → 玩家变身后启用飞行,不再受重力)+ 会喷火(fire = 一个
+  //   id标签修正数据包,喂同一 EffectResolver:对龙近乎免疫、对火元素回血、对方块减半)。
   { protoId: 4, key: 'dragon',     tags: ['生物.龙', '阶.钻'], tier: 4, hp: 200, name: '巨龙',
-    behavior: { packs: ['skittish_flee'] }, combat: { atk: 12, def: 8 } },
+    behavior: { packs: ['fearless'] }, combat: { atk: 12, def: 8 },
+    fly: true,
+    fire: { base: 14, mods: [{ tag: '方块', val: -0.5 }, { tag: '生物.龙', val: -0.9 }, { tag: '元素.火', val: -2.0 }] } },
 
   // —— NEW creatures added as PURE DATA (generality test: distinct behaviour from data,
   //    zero kernel change). They reference packs by code too. ——
@@ -36,6 +40,15 @@ export const PROTOTYPES = [
   //    which row of this table they bind to.
   { protoId: 7, key: 'player', tags: ['生物.人', '阶.木'], tier: 0, hp: 20, name: '玩家',
     combat: { atk: 1, def: 0 } },
+
+  // —— items are objects too. 变龙苹果:一个食物对象,"使用"分面 = 对使用者施加一次
+  //    变身 effect(form: dragon)。useItem 解析器读 `use` 数据,无苹果专用代码。
+  { protoId: 8, key: 'dragon_apple', tags: ['物品.食物', '物品.魔法'], tier: 0, hp: 1, name: '变龙苹果',
+    use: { kind: 'transform', form: 'dragon' } },
+
+  // —— 火:龙喷出的投射物对象(会动的"火方块")。launch 行为包让它直飞+到寿命自销;
+  //    fly 分面让它在空中(按 e.y)渲染。伤害由喷火者的攻击器(EffectResolver)产生。
+  { protoId: 9, key: 'fire', tags: ['元素.火', '方块.火'], tier: 0, hp: 1, name: '火', fly: true },
 ];
 
 export const PROTO_COUNT = PROTOTYPES.length;

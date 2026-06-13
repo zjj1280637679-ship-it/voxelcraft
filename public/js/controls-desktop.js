@@ -64,6 +64,9 @@ export function initDesktopControls(canvas, player, hooks) {
       case 'KeyA': case 'ArrowLeft': player.input.l = 1; break;
       case 'KeyD': case 'ArrowRight': player.input.r = 1; break;
       case 'Space': player.input.jump = true; break;
+      case 'ShiftLeft': case 'ShiftRight': player.input.down = 1; break;   // 飞行下降
+      case 'KeyF': player.input.fire = true; break;                       // 喷火(按住连续)
+      case 'KeyG': player.input.useApple = true; break;                   // 吃变龙苹果(变身)
       default: {
         const m = /^Digit([1-8])$/.exec(e.code);
         if (!m) return;
@@ -82,6 +85,8 @@ export function initDesktopControls(canvas, player, hooks) {
       case 'KeyA': case 'ArrowLeft': player.input.l = 0; break;
       case 'KeyD': case 'ArrowRight': player.input.r = 0; break;
       case 'Space': player.input.jump = false; break;
+      case 'ShiftLeft': case 'ShiftRight': player.input.down = 0; break;
+      case 'KeyF': player.input.fire = false; break;
     }
   });
 

@@ -101,6 +101,7 @@ export function perceive({ world, simDriver, player, radius = 10, step = 1, mark
   // your current 变身 form + the combat tags it resolves through
   const form = player.form ? protoByKey(player.form) : null;
   const formTags = form ? form.tags.concat(player.uidTag ? [player.uidTag] : []) : [];
+  const alt = `高度y=${player.pos.y.toFixed(1)}${player.fly ? ' ✈飞行' : ''}`;
 
   // 🎯 marked targets, each with straight-line distance + compass bearing from you
   const targets = [...markSet]
@@ -119,7 +120,7 @@ export function perceive({ world, simDriver, player, radius = 10, step = 1, mark
   const bar = '─'.repeat(w);
   const out = [
     `透视 @你(${cx},${cz}) 半径${radius} 像素${step}格/字 北↑东→`,
-    `你: 形态=${form ? form.name : '?'}[${formTags.join(',')}]`,
+    `你: 形态=${form ? form.name : '?'}[${formTags.join(',')}] ${alt}`,
     '图例: @你 D钻 #石 .草 ,土 ~沙 T木 t叶 =板 B砖  生物=代号首字母(标记大写/未标记小写)',
     '┌' + bar + '┐',
     ...rows.map((r) => '│' + r + '│'),

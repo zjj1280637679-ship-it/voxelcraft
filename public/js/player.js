@@ -17,7 +17,8 @@ export class Player {
     this.yaw = 0;
     this.pitch = 0;
     this.onGround = false;
-    this.input = { f: 0, b: 0, l: 0, r: 0, jump: false };
+    this.fly = false;        // 变身成会飞的形态(龙)时开启:无重力 + Space升/Shift降
+    this.input = { f: 0, b: 0, l: 0, r: 0, jump: false, down: 0, fire: false, useApple: false };
   }
 
   update(dt) {
@@ -34,11 +35,17 @@ export class Player {
     this.vel.x = (-sy * mf + cy * ms) * PLAYER.SPEED;
     this.vel.z = (-cy * mf - sy * ms) * PLAYER.SPEED;
 
-    this.vel.y -= PLAYER.GRAVITY * dt;
-    if (this.vel.y < -MAX_FALL) this.vel.y = -MAX_FALL;
-    if (this.input.jump && this.onGround) {
-      this.vel.y = PLAYER.JUMP;
-      this.onGround = false;
+    if (this.fly) {
+      // flight (dragon form): no gravity; hold/ascend/descend from Space / Shift.
+      const up = (this.input.jump ? 1 : 0) - (this.input.down ? 1 : 0);
+      this.vel.y = up * PLAYER.FLY;
+    } else {
+      this.vel.y -= PLAYER.GRAVITY * dt;
+      if (this.vel.y < -MAX_FALL) this.vel.y = -MAX_FALL;
+      if (this.input.jump && this.onGround) {
+        this.vel.y = PLAYER.JUMP;
+        this.onGround = false;
+      }
     }
 
     this._moveAxis('x', this.vel.x * dt);

@@ -56,6 +56,7 @@ export const PLAYER = {
   EYE: 1.62,     // eye height above feet
   SPEED: 5.5,    // m/s walk speed
   JUMP: 8.5,     // jump impulse m/s
+  FLY: 9,        // m/s vertical flight speed (dragon form)
   GRAVITY: 24,   // m/s^2
   REACH: 6,      // block interaction distance
 };

@@ -92,3 +92,22 @@ for (const [dx, dz, want] of bcheck) {
   console.log(`  (dx=${dx},dz=${dz}) → ${got}  ${got === want ? '✓' : '✗ 期望' + want}`);
 }
 console.log('  测向: ' + (bpass ? 'PASS' : 'FAIL'));
+
+// ---- 6. 龙的设计: 投射物 lifetime 自销(launch+ttl) + 喷火伤害(同一 EffectResolver)----
+console.log('\n=== 6. 龙: 火投射物 ttl 自销 + 喷火走 EffectResolver ===');
+const fst = makeState();
+fst.ents.set(1, makeEntity(1, 'fire', 'fire_breath', 0, 51, 0, 7)); // ttl=8 ticks
+const sizes = [];
+for (let f = 0; f < 10; f++) { reduce(fst, { players: [] }, 0.1, { out: [] }); sizes.push(fst.ents.size); }
+const reaped = fst.ents.size === 0;
+console.log(`  火投射物每 tick 存活数 ${JSON.stringify(sizes)} → 寿终自销: ${reaped ? 'PASS' : 'FAIL'}`);
+const F = protoByKey('dragon').fire;
+const fireOn = (label, tags) => {
+  const v = effect(F.base, F.mods, tags);
+  console.log('  ' + label.padEnd(22) + ' = ' + v.toFixed(1).padStart(6) + '  → ' + (v > 0 ? '烧伤' : v < 0 ? '回血' : '免疫'));
+};
+fireOn('龙息 喷 石像(生物.石像)', protoByKey('golem').tags);   // 14 full
+fireOn('龙息 喷 兔子(生物.兔)',   protoByKey('rabbit').tags);  // 14 → one-shot hp5
+fireOn('龙息 喷 龙(生物.龙)',     protoByKey('dragon').tags);  // 14×(1-0.9)=1.4 近免疫
+fireOn('龙息 喷 钻石块(方块.钻)', protoByKey('diamond_block').tags); // 14×0.5=7
+fireOn('龙息 喷 火(元素.火)',     protoByKey('fire').tags);    // 14×(1-2)=-14 回血
