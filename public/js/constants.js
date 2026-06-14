@@ -3,7 +3,9 @@
 // duplicates only the few message-type strings it needs (JSON protocol).
 
 export const CHUNK = 16;       // chunk is 16x16 columns
-export const HEIGHT = 64;      // world height in blocks
+export const HEIGHT = 128;     // world height in blocks (terrain is absolute 4..50; the rest is
+                               // build headroom). Safe to raise: storage is y-indexed, save/wire
+                               // format is plain [x,y,z,id] (no bit-packing), all ceilings read HEIGHT.
 
 // Block ids (0 = air). Max 255 (chunks are Uint8Array).
 export const BLOCK = {
