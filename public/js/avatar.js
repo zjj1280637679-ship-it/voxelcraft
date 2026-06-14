@@ -9,8 +9,10 @@
 
 import { PALETTE, SKIN_TONES } from './constants.js';
 
-// fixed accent palette (not in the 4-slot skin yet — the detail this backend unlocks)
-const HAIR = '#3a2a1b', BOOT = '#2b2420', BELT = '#3a2a18', CLOAK = '#3f6e4a', EYE = '#15171c', MOUTH = '#6a463c';
+// fixed accent palette (the "森林看林人" outfit — tuned to the gpt-image-2 reference; not in the
+// 4-slot skin yet, this is the detail the voxel backend unlocks).
+const HAIR = '#5a3c24', BOOT = '#4a3322', BELT = '#3a2a18', CLOAK = '#2f5a32',
+  STRAP = '#5a3a1a', BUCKLE = '#c8a23a', EYE = '#15171c', MOUTH = '#6a463c';
 
 export const AVATAR_VOX_H = 30; // model height in voxels (the grid resolution / detail ceiling knob)
 
@@ -25,7 +27,11 @@ export function avatarModel(sk) {
     // ── torso + belt + collar/cloak ──
     B(-6, 6, 14, 22, -3, 3, top),
     B(-6, 6, 13, 14, -3, 3, BELT),
-    B(-5, 5, 21, 22, -4, 3, CLOAK),
+    B(-1, 1, 13, 14, -4, -4, BUCKLE),                 // gold belt buckle (protrudes)
+    B(-5, 5, 21, 22, -4, 3, CLOAK),                   // green hood collar over the shoulders
+    // diagonal chest strap (stepped boxes on the torso front)
+    B(-6, -3, 19, 21, -3, -3, STRAP), B(-4, -1, 17, 19, -3, -3, STRAP),
+    B(-2, 1, 15, 17, -3, -3, STRAP), B(0, 3, 13, 15, -3, -3, STRAP),
     // ── arms (sleeves) + hands ──
     B(-8, -7, 14, 22, -2, 2, top), B(7, 8, 14, 22, -2, 2, top),
     B(-8, -7, 13, 14, -2, 2, skin), B(7, 8, 13, 14, -2, 2, skin),
