@@ -13,8 +13,22 @@
   <div id="hud">
     <div id="crosshair"></div>
     <div id="roomLabel"></div>
-    <button id="exitBtn" type="button">退出</button>
+    <button id="settingsBtn" type="button" aria-label="设置">⚙</button>
     <div id="hotbar"></div>
+  </div>
+
+  <!-- In-game settings page. 画质 = 允许上限,实际随算力自适应降低(clientconfig 解析器)。 -->
+  <div id="settingsPanel" class="hidden">
+    <div class="settings-card">
+      <p class="page-heading">设置</p>
+      <p class="settings-hint">画质为「允许上限」，实际随算力自适应升降</p>
+      <div class="setting-row"><span class="setting-label">分辨率</span><div class="seg" id="segResolution"></div></div>
+      <div class="setting-row"><span class="setting-label">光追</span><div class="seg" id="segRaytrace"></div></div>
+      <div class="setting-row"><span class="setting-label">帧率上限</span><div class="seg" id="segFramerate"></div></div>
+      <p id="settingsActual" class="settings-actual">—</p>
+      <button id="settingsCloseBtn" class="btn btn-primary btn-block" type="button">返回游戏</button>
+      <button id="exitBtn" class="btn btn-danger btn-block" type="button">退出</button>
+    </div>
   </div>
 
   <div id="touchUI">

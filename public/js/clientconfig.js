@@ -66,20 +66,32 @@ export class Signals {
   get values() { return { fps: this.fps, gpu: +this.gpu.toFixed(3) }; }
 }
 
-// THE DATA — edit this to change behaviour (data-only, no code, low Hamming). One rule list per knob.
+// THE ADAPTIVE DATA — only the runtime ceils (掉帧/高压 → 往下钳). The base/ceiling comes from the
+// PLAYER's prefs (the allowed max). Edit to change adaptive behaviour (data-only, low Hamming).
 export const RENDER_CONFIG = {
   resolution: [
-    { value: 1.0 },                                                       // 全局默认
-    { scope: 'hero', value: 1.5 },                                        // 单独:hero 对象超采样
-    { when: [{ sig: 'fps', op: '<', val: 45 }], value: 0.7, ceil: true }, // 压力门:掉帧→往下钳
+    { when: [{ sig: 'fps', op: '<', val: 45 }], value: 0.7, ceil: true }, // 掉帧→往下钳
     { when: [{ sig: 'fps', op: '<', val: 30 }], value: 0.5, ceil: true }, // 更卡→钳更狠
   ],
   raytrace: [
-    { value: true },
     { when: [{ sig: 'fps', op: '<', val: 40 }], value: false, ceil: true }, // 卡→强制关
   ],
   framerate: [
-    { value: 60 },
     { when: [{ sig: 'gpu', op: '>', val: 0.85 }], value: 30, ceil: true },  // 高压→限 30
   ],
 };
+
+// The player's chosen ceilings (= the ALLOWED MAX per knob). Defaults; the UI overrides + persists.
+export const DEFAULT_PREFS = { resolution: 1.0, raytrace: true, framerate: 60 };
+
+// Resolve every knob with the PLAYER's pref as the base/ceiling: run at the player's max when the
+// compute unit sustains it, let the adaptive ceils clamp DOWN under pressure, never exceed the max.
+//   "视觉设置只是允许的上限,具体看计算单元且自适应降低。"
+export function resolveWithPrefs(prefs, ctx) {
+  const out = {};
+  for (const k in DEFAULT_PREFS) {
+    const base = prefs && prefs[k] !== undefined ? prefs[k] : DEFAULT_PREFS[k];
+    out[k] = resolveSetting([{ value: base }].concat(RENDER_CONFIG[k] || []), ctx);
+  }
+  return out;
+}

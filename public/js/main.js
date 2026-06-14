@@ -25,7 +25,7 @@ import { isTouchDevice, initTouchControls } from './controls-touch.js';
 import { RelayNet } from './network.js';
 import { HostRoom } from './host.js';
 import { startMenuBg } from './menubg.js';
-import { Signals, RENDER_CONFIG, resolveAll } from './clientconfig.js';
+import { Signals, RENDER_CONFIG, DEFAULT_PREFS, resolveWithPrefs } from './clientconfig.js';
 
 const canvas = document.getElementById('gameCanvas');
 const renderer = new Renderer(canvas);
@@ -45,6 +45,18 @@ let simDriver = null;        // pure sim kernel ↔ shell bridge (creatures); nu
 const renderSignals = new Signals();
 let renderCfg = { resolution: 1, raytrace: true, framerate: 60 };
 let cfgAcc = 0, lastRenderAt = 0, sigOverride = null;
+let userPrefs = loadPrefs();   // the player's chosen ceilings (allowed max per knob), persisted
+function loadPrefs() {
+  try { const s = localStorage.getItem('vc-render-prefs'); if (s) return { ...DEFAULT_PREFS, ...JSON.parse(s) }; } catch (_) {}
+  return { ...DEFAULT_PREFS };
+}
+function savePrefs() { try { localStorage.setItem('vc-render-prefs', JSON.stringify(userPrefs)); } catch (_) {} }
+// re-resolve (player ceiling × adaptive pressure) and apply to the renderer. Called by the loop
+// every 250ms AND immediately on a pref change so the UI readout never lags.
+function applyRenderConfig() {
+  renderCfg = resolveWithPrefs(userPrefs, { signals: sigOverride || renderSignals.values });
+  renderer.setRenderScale(renderCfg.resolution);
+}
 let roomCode = '';           // the room's display name
 let myId = -1;
 let myName = '玩家';          // active character (ui.js owns storage/selection)
@@ -1099,11 +1111,7 @@ function loop(now) {
   // client render-config: sample pressure, re-resolve 4×/s, apply resolution (presentation-only).
   renderSignals.sample(rawDtMs);
   cfgAcc += rawDtMs;
-  if (cfgAcc >= 250) {
-    cfgAcc = 0;
-    renderCfg = resolveAll(RENDER_CONFIG, { signals: sigOverride || renderSignals.values, scope: 'global' });
-    renderer.setRenderScale(renderCfg.resolution);
-  }
+  if (cfgAcc >= 250) { cfgAcc = 0; applyRenderConfig(); }
 
   if (touchTick) touchTick(now);
 
@@ -1402,6 +1410,70 @@ function computeHit(weaponKey, target) {
   return `${w.name}→${label}[${defTags.join(',')}]: ${kind}`;
 }
 
+// ---- in-game settings page: player drives the global quality CEILINGS (实际随算力自适应降低) ----
+const SEG = {
+  resolution: [['省电', 0.5], ['标准', 1], ['高', 1.5], ['极致', 2]],
+  raytrace: [['关', false], ['开', true]],
+  framerate: [['30', 30], ['60', 60], ['120', 120]],
+};
+const SEG_EL = { resolution: 'segResolution', raytrace: 'segRaytrace', framerate: 'segFramerate' };
+let settingsInited = false;
+let settingsTimer = null;
+
+function refreshSegs() {
+  for (const key in SEG_EL) {
+    const el = document.getElementById(SEG_EL[key]);
+    if (!el) continue;
+    for (const b of el.children) b.classList.toggle('active', JSON.parse(b.dataset.val) === userPrefs[key]);
+  }
+}
+function refreshActual() {
+  const el = document.getElementById('settingsActual');
+  if (!el) return;
+  const r = renderCfg, fps = (sigOverride || renderSignals.values).fps;
+  const res = `分辨率 ≤${userPrefs.resolution}×${r.resolution !== userPrefs.resolution ? ' → 当前 ' + r.resolution + '×(自适应)' : ''}`;
+  const rt = `光追 ${userPrefs.raytrace ? '开' : '关'}${r.raytrace !== userPrefs.raytrace ? ' → 当前 ' + (r.raytrace ? '开' : '关') : ''}`;
+  const fr = `帧率 ≤${userPrefs.framerate}${r.framerate !== userPrefs.framerate ? ' → 当前 ' + r.framerate : ''}`;
+  el.textContent = `${res}　${rt}　${fr}　(实时 ${fps}fps)`;
+}
+function openSettings() {
+  try { if (document.exitPointerLock) document.exitPointerLock(); } catch (_) {}
+  document.getElementById('settingsPanel').classList.remove('hidden');
+  refreshSegs(); refreshActual();
+  settingsTimer = setInterval(refreshActual, 400);
+}
+function closeSettings() {
+  document.getElementById('settingsPanel').classList.add('hidden');
+  if (settingsTimer) { clearInterval(settingsTimer); settingsTimer = null; }
+}
+function initSettingsUI() {
+  if (settingsInited) return;
+  settingsInited = true;
+  for (const key in SEG_EL) {
+    const el = document.getElementById(SEG_EL[key]);
+    if (!el) continue;
+    el.innerHTML = '';
+    for (const [label, val] of SEG[key]) {
+      const b = document.createElement('button');
+      b.className = 'seg-btn';
+      b.textContent = label;
+      b.dataset.val = JSON.stringify(val);
+      b.addEventListener('click', () => { userPrefs[key] = val; savePrefs(); applyRenderConfig(); refreshSegs(); refreshActual(); });
+      el.appendChild(b);
+    }
+  }
+  const btn = document.getElementById('settingsBtn');
+  if (btn) {
+    btn.addEventListener('click', openSettings);
+    btn.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
+  }
+  const closeBtn = document.getElementById('settingsCloseBtn');
+  if (closeBtn) closeBtn.addEventListener('click', closeSettings);
+  const exitBtn = document.getElementById('exitBtn');           // exit lives in the panel; also close it
+  if (exitBtn) exitBtn.addEventListener('click', closeSettings);
+}
+initSettingsUI();
+
 window.__vc = {
   get world() { return world; },
   get player() { return player; },
@@ -1429,7 +1501,8 @@ window.__vc = {
   breathe: breatheFire,                       // 喷火(锥形 EffectResolver 伤害 + 火焰投射物)
   hit: computeHit,                            // EffectResolver 试算:hit('wood_shovel','self')
   // client render-config (presentation-local): inspect resolved knobs + override signals for testing
-  get renderConfig() { return { resolved: renderCfg, signals: sigOverride || renderSignals.values, config: RENDER_CONFIG }; },
+  get renderConfig() { return { prefs: userPrefs, resolved: renderCfg, signals: sigOverride || renderSignals.values, config: RENDER_CONFIG }; },
+  setPref(k, v) { userPrefs[k] = v; savePrefs(); applyRenderConfig(); refreshSegs(); refreshActual(); return userPrefs; },   // player ceiling
   simSignal(obj) { sigOverride = obj || null; return sigOverride; },   // e.g. simSignal({fps:25,gpu:0.95})
   testArena() { return buildTestArena({ world, simDriver, renderer, player, spawn: (...a) => simDriver.spawn(...a) }); },
   // Local world-save entry: live session snapshot in the vc-worlds format.
