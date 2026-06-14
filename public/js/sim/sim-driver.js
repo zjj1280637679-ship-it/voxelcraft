@@ -59,7 +59,8 @@ export class SimDriver {
         // to the surface (placeholder until real models/physics land).
         let y = e.y;
         if (!protoByKey(e.m.p).fly) {
-          try { y = this.world.surfaceHeight(Math.floor(e.x), Math.floor(e.z)); } catch (_) { /* keep last */ }
+          // feet sit on the TOP of the surface block (surfaceHeight is the block's y; +1 = its top)
+          try { y = this.world.surfaceHeight(Math.floor(e.x), Math.floor(e.z)) + 1; } catch (_) { /* keep last */ }
         }
         this.renderer.updatePlayer('e' + e.id, [e.x, y + (e.bob || 0) * 0.6, e.z], 0, 0);
       }

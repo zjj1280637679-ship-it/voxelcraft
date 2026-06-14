@@ -193,32 +193,55 @@ export class Renderer {
     const tw = fem ? w * 0.92 : w; // female torso x/z narrowed
 
     const group = new THREE.Group();
+    const geos = [], mats = [];
+    // a box part (group origin = feet); tracks geo+mat for disposal, casts & receives shadow.
+    const part = (sx, sy, sz, color, px, py, pz) => {
+      const g = new THREE.BoxGeometry(sx, sy, sz);
+      const m = new THREE.MeshLambertMaterial({ color: new THREE.Color(color) });
+      const mesh = new THREE.Mesh(g, m);
+      mesh.position.set(px, py, pz);
+      mesh.castShadow = true; mesh.receiveShadow = true;
+      geos.push(g); mats.push(m);
+      return mesh;
+    };
+    const skinCol = SKIN_TONES[k], topCol = PALETTE[t], pantCol = PALETTE[p];
 
-    // Stacked boxy avatar, group origin = feet. Base stack (w=h=1):
-    // legs 0..0.6, torso 0.6..1.2, head 1.2..1.7. x/z sizes scale by body w
-    // (torso by tw), y sizes AND stack positions by body h.
-    const legsGeo = new THREE.BoxGeometry(0.6 * w, 0.6 * h, 0.3 * w);
-    const legsMat = new THREE.MeshLambertMaterial({ color: new THREE.Color(PALETTE[p]) });
-    const legs = new THREE.Mesh(legsGeo, legsMat);
-    legs.position.y = 0.3 * h;
-    group.add(legs);
+    // A proper blocky humanoid: 2 legs + torso + 2 arms + head (with a face). Sizes scale by body
+    // w/tw/h so body type still matters; colours come from the skin data. NOT world blocks — this is
+    // a present-facet model, swappable for a finer voxel mesh later with zero kernel/world change.
+    const legH = 0.72 * h, torsoH = 0.60 * h, headS = 0.52 * w, headH = 0.50 * h;
+    const torsoW = 0.50 * tw, torsoD = 0.28 * tw, torsoY = legH + torsoH / 2;
+    const armW = 0.17 * w, armH = 0.58 * h, armX = torsoW / 2 + armW / 2;
+    const shoulderY = legH + torsoH - armH / 2;
 
-    const torsoGeo = new THREE.BoxGeometry(0.6 * tw, 0.6 * h, 0.3 * tw);
-    const torsoMat = new THREE.MeshLambertMaterial({ color: new THREE.Color(PALETTE[t]) });
-    const torso = new THREE.Mesh(torsoGeo, torsoMat);
-    torso.position.y = 0.9 * h;
-    group.add(torso);
+    group.add(part(0.24 * w, legH, 0.26 * w, pantCol, -0.13 * w, legH / 2, 0));   // left leg
+    group.add(part(0.24 * w, legH, 0.26 * w, pantCol, 0.13 * w, legH / 2, 0));    // right leg
+    group.add(part(torsoW, torsoH, torsoD, topCol, 0, torsoY, 0));               // torso
+    group.add(part(armW, armH, 0.22 * w, topCol, -armX, shoulderY, 0));          // left arm (sleeve)
+    group.add(part(armW, armH, 0.22 * w, topCol, armX, shoulderY, 0));           // right arm
 
-    const headGeo = new THREE.BoxGeometry(0.5 * w, 0.5 * h, 0.5 * w);
-    const headMat = new THREE.MeshLambertMaterial({ color: new THREE.Color(SKIN_TONES[k]) });
+    // head — kept as its own ref so updatePlayer can tilt it (pitch look). Eyes + hair are CHILDREN
+    // of the head so they rotate with it.
+    const headGeo = new THREE.BoxGeometry(headS, headH, headS);
+    const headMat = new THREE.MeshLambertMaterial({ color: new THREE.Color(skinCol) });
     const head = new THREE.Mesh(headGeo, headMat);
-    head.position.y = 1.45 * h;
+    head.position.y = legH + torsoH + headH / 2;
+    head.castShadow = true; head.receiveShadow = true;
+    geos.push(headGeo); mats.push(headMat);
     group.add(head);
 
-    for (const m of [legs, torso, head]) { m.castShadow = true; m.receiveShadow = true; }
+    // face: two eyes on the forward (−z) face + a hair cap on top (head-local coords).
+    const eyeGeo = new THREE.BoxGeometry(0.1 * w, 0.1 * h, 0.04 * w);
+    const eyeMat = new THREE.MeshLambertMaterial({ color: 0x20242b });
+    const eyeZ = -headS / 2 - 0.001;
+    const le = new THREE.Mesh(eyeGeo, eyeMat); le.position.set(-0.12 * w, 0.03 * h, eyeZ); head.add(le);
+    const re = new THREE.Mesh(eyeGeo, eyeMat); re.position.set(0.12 * w, 0.03 * h, eyeZ); head.add(re);
+    geos.push(eyeGeo); mats.push(eyeMat);
+    const hair = part(headS + 0.02 * w, 0.16 * h, headS + 0.02 * w, 0x4a3526, 0, headH / 2 - 0.05 * h, 0);
+    head.add(hair); // re-parent onto the head (positions above are head-local)
 
     const sprite = makeNameSprite(name);
-    sprite.position.y = 1.7 * h + 0.35;
+    sprite.position.y = legH + torsoH + headH + 0.32;
     group.add(sprite);
 
     if (scale !== 1) {
@@ -237,8 +260,8 @@ export class Renderer {
       targetRy: 0,
       targetRx: 0,
       initialized: false,
-      geos: [legsGeo, torsoGeo, headGeo],
-      mats: [legsMat, torsoMat, headMat],
+      geos,
+      mats,
     });
   }
 
