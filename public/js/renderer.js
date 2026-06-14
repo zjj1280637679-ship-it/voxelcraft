@@ -2,6 +2,7 @@
 // chunks; geometries are disposed whenever a chunk mesh is rebuilt or removed.
 import * as THREE from '../lib/three.module.js';
 import { CHUNK, PALETTE, SKIN_TONES, BODIES, chunkKey } from './constants.js';
+import { avatarParts } from './avatar.js';
 import { buildAtlas } from './textures.js';
 import { buildChunkGeometry } from './mesher.js';
 
@@ -188,60 +189,33 @@ export class Renderer {
   // collapses to the default skin (shared rule, see cleanSkin).
   addPlayer(id, name, skin, scale = 1) {
     if (this.players.has(id)) this.removePlayer(id);
-    const { b, t, p, k } = cleanSkin(skin);
-    const { w, h, fem } = BODIES[b];
-    const tw = fem ? w * 0.92 : w; // female torso x/z narrowed
+    const parts = avatarParts(cleanSkin(skin));   // the UNIFIED avatar spec (shared with the menu 2D preview)
 
     const group = new THREE.Group();
     const geos = [], mats = [];
-    // a box part (group origin = feet); tracks geo+mat for disposal, casts & receives shadow.
-    const part = (sx, sy, sz, color, px, py, pz) => {
-      const g = new THREE.BoxGeometry(sx, sy, sz);
-      const m = new THREE.MeshLambertMaterial({ color: new THREE.Color(color) });
+    // 3D backend: turn each spec box into a Three.js mesh. `parent:'head'` parts attach to the head
+    // (head-local = world − head pos) so they tilt with a pitch look; the rest sit on the group.
+    let head = null, topY = 0;
+    const headSpec = parts.find((q) => q.id === 'head');
+    for (const q of parts) {
+      const g = new THREE.BoxGeometry(q.sx, q.sy, q.sz);
+      const m = new THREE.MeshLambertMaterial({ color: new THREE.Color(q.color) });
       const mesh = new THREE.Mesh(g, m);
-      mesh.position.set(px, py, pz);
       mesh.castShadow = true; mesh.receiveShadow = true;
       geos.push(g); mats.push(m);
-      return mesh;
-    };
-    const skinCol = SKIN_TONES[k], topCol = PALETTE[t], pantCol = PALETTE[p];
-
-    // A proper blocky humanoid: 2 legs + torso + 2 arms + head (with a face). Sizes scale by body
-    // w/tw/h so body type still matters; colours come from the skin data. NOT world blocks — this is
-    // a present-facet model, swappable for a finer voxel mesh later with zero kernel/world change.
-    const legH = 0.72 * h, torsoH = 0.60 * h, headS = 0.52 * w, headH = 0.50 * h;
-    const torsoW = 0.50 * tw, torsoD = 0.28 * tw, torsoY = legH + torsoH / 2;
-    const armW = 0.17 * w, armH = 0.58 * h, armX = torsoW / 2 + armW / 2;
-    const shoulderY = legH + torsoH - armH / 2;
-
-    group.add(part(0.24 * w, legH, 0.26 * w, pantCol, -0.13 * w, legH / 2, 0));   // left leg
-    group.add(part(0.24 * w, legH, 0.26 * w, pantCol, 0.13 * w, legH / 2, 0));    // right leg
-    group.add(part(torsoW, torsoH, torsoD, topCol, 0, torsoY, 0));               // torso
-    group.add(part(armW, armH, 0.22 * w, topCol, -armX, shoulderY, 0));          // left arm (sleeve)
-    group.add(part(armW, armH, 0.22 * w, topCol, armX, shoulderY, 0));           // right arm
-
-    // head — kept as its own ref so updatePlayer can tilt it (pitch look). Eyes + hair are CHILDREN
-    // of the head so they rotate with it.
-    const headGeo = new THREE.BoxGeometry(headS, headH, headS);
-    const headMat = new THREE.MeshLambertMaterial({ color: new THREE.Color(skinCol) });
-    const head = new THREE.Mesh(headGeo, headMat);
-    head.position.y = legH + torsoH + headH / 2;
-    head.castShadow = true; head.receiveShadow = true;
-    geos.push(headGeo); mats.push(headMat);
-    group.add(head);
-
-    // face: two eyes on the forward (−z) face + a hair cap on top (head-local coords).
-    const eyeGeo = new THREE.BoxGeometry(0.1 * w, 0.1 * h, 0.04 * w);
-    const eyeMat = new THREE.MeshLambertMaterial({ color: 0x20242b });
-    const eyeZ = -headS / 2 - 0.001;
-    const le = new THREE.Mesh(eyeGeo, eyeMat); le.position.set(-0.12 * w, 0.03 * h, eyeZ); head.add(le);
-    const re = new THREE.Mesh(eyeGeo, eyeMat); re.position.set(0.12 * w, 0.03 * h, eyeZ); head.add(re);
-    geos.push(eyeGeo); mats.push(eyeMat);
-    const hair = part(headS + 0.02 * w, 0.16 * h, headS + 0.02 * w, 0x4a3526, 0, headH / 2 - 0.05 * h, 0);
-    head.add(hair); // re-parent onto the head (positions above are head-local)
+      if (q.parent === 'head' && head) {
+        mesh.position.set(q.x - headSpec.x, q.y - headSpec.y, q.z - headSpec.z);
+        head.add(mesh);
+      } else {
+        mesh.position.set(q.x, q.y, q.z);
+        group.add(mesh);
+        if (q.id === 'head') head = mesh;
+      }
+      topY = Math.max(topY, q.y + q.sy / 2);
+    }
 
     const sprite = makeNameSprite(name);
-    sprite.position.y = legH + torsoH + headH + 0.32;
+    sprite.position.y = topY + 0.32;
     group.add(sprite);
 
     if (scale !== 1) {

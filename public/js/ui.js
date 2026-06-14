@@ -6,6 +6,7 @@
 // rendered exclusively via textContent, never innerHTML.
 
 import { PALETTE, SKIN_TONES, BODIES } from './constants.js';
+import { avatarParts } from './avatar.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -152,43 +153,31 @@ export function ensureCharacter() {
 
 // ---------- avatar preview (skin v2, renderer.addPlayer proportions) ----------
 
-// Front view of the boxy avatar. Base boxes (w=h=1): legs 0.6x0.6, torso
-// 0.6x0.6 (x further *0.92 when fem), head 0.5x0.5 — 1.7 units tall. Widths
-// scale by BODIES[b].w, heights by BODIES[b].h; feet share one floor line so
-// tall/short bodies compare visually.
+// Front view of the avatar — a 2D projection of the UNIFIED avatarParts spec (the SAME model the
+// in-game 3D renderer builds). Feet share one floor line so tall/short bodies compare; the face
+// (eyes at −z) is drawn last so it lands on top. Change the model in avatar.js → both views update.
 function drawAvatar(canvas, skin) {
   const ctx = canvas.getContext('2d');
   const w = canvas.width;
   const h = canvas.height;
   ctx.clearRect(0, 0, w, h);
-  const sk = cleanSkin(skin);
-  const body = BODIES[sk.b];
-  const maxH = 1.7 * 1.08;  // tallest body
-  const maxW = 0.6 * 1.18;  // widest body
-  const u = Math.min((h * 0.92) / maxH, (w * 0.82) / maxW);
-  const floorY = (h + maxH * u) / 2;
-  const cx = w / 2;
-  const legW = 0.6 * body.w * u;
-  const torW = 0.6 * body.w * (body.fem ? 0.92 : 1) * u;
-  const headW = 0.5 * body.w * u;
-  const legH = 0.6 * body.h * u;
-  const torH = 0.6 * body.h * u;
-  const headH = 0.5 * body.h * u;
-  const yLeg = floorY - legH;
-  const yTor = yLeg - torH;
-  const yHead = yTor - headH;
-  const box = (color, x, y, bw, bh) => {
-    ctx.fillStyle = color;
-    ctx.fillRect(Math.round(x), Math.round(y), Math.max(1, Math.round(bw)), Math.max(1, Math.round(bh)));
-  };
-  box(SKIN_TONES[sk.k], cx - headW / 2, yHead, headW, headH);
-  box(PALETTE[sk.t], cx - torW / 2, yTor, torW, torH);
-  box(PALETTE[sk.p], cx - legW / 2, yLeg, legW, legH);
-  // blocky 3D hints: darker right edges + leg gap
-  box('rgba(0,0,0,0.18)', cx + headW * 0.26, yHead, headW * 0.24, headH);
-  box('rgba(0,0,0,0.18)', cx + torW * 0.30, yTor, torW * 0.20, torH);
-  box('rgba(0,0,0,0.18)', cx + legW * 0.30, yLeg, legW * 0.20, legH);
-  box('rgba(0,0,0,0.25)', cx - 1, yLeg + 1, 2, legH - 2);
+  const parts = avatarParts(cleanSkin(skin));
+  let maxX = 0.5, topY = 0;
+  for (const q of parts) { maxX = Math.max(maxX, Math.abs(q.x) + q.sx / 2); topY = Math.max(topY, q.y + q.sy / 2); }
+  const u = Math.min((h * 0.92) / topY, (w * 0.86) / (maxX * 2));
+  const cx = w / 2, floorY = (h + topY * u) / 2;
+  // back-to-front (larger z first) so the forward face lands on top
+  for (const q of parts.slice().sort((a, b) => b.z - a.z)) {
+    const x = cx + (q.x - q.sx / 2) * u;
+    const y = floorY - (q.y + q.sy / 2) * u;
+    const bw = Math.max(1, Math.round(q.sx * u)), bh = Math.max(1, Math.round(q.sy * u));
+    ctx.fillStyle = q.color;
+    ctx.fillRect(Math.round(x), Math.round(y), bw, bh);
+    if (bw > 6) { // blocky 3D hint: darker right edge on the larger boxes
+      ctx.fillStyle = 'rgba(0,0,0,0.16)';
+      ctx.fillRect(Math.round(x + bw * 0.72), Math.round(y), Math.round(bw * 0.28), bh);
+    }
+  }
 }
 
 // Head close-up for the 40px list thumbnails: skin-tone head + top-color
@@ -213,6 +202,7 @@ function drawAvatarBust(canvas, skin) {
   // head (skin tone) over the shoulders
   px(9, 3, 22, 24, '#1a120b');                              // 2px outline
   px(11, 5, 18, 20, SKIN_TONES[sk.k]);
+  px(10, 4, 20, 6, '#4a3526');                              // hair cap (matches avatarParts)
   // blocky right-edge shade + simple eyes, matching drawAvatar's 3D hints
   px(24, 5, 5, 20, 'rgba(0, 0, 0, 0.18)');
   px(15, 13, 3, 3, 'rgba(20, 14, 8, 0.85)');
