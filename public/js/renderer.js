@@ -114,6 +114,7 @@ export class Renderer {
     this.scene.add(this.highlight);
 
     this._lastTime = performance.now();
+    this._renderScale = 1;       // client render-scale (presentation, set by clientconfig)
     this.resize();
     console.log('[vc] renderer initialized');
   }
@@ -275,7 +276,16 @@ export class Renderer {
     const h = window.innerHeight;
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2) * this._renderScale);
     this.renderer.setSize(w, h, false);
+  }
+
+  // Presentation-local render resolution multiplier (0.25..2). Applied via the drawing-buffer
+  // pixel ratio; cheap, live, and observable. Driven by clientconfig (never the sim).
+  setRenderScale(s) {
+    const c = Math.max(0.25, Math.min(2, s || 1));
+    if (c === this._renderScale) return;
+    this._renderScale = c;
+    this.resize();
   }
 }

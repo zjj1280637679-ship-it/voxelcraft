@@ -25,6 +25,7 @@ import { isTouchDevice, initTouchControls } from './controls-touch.js';
 import { RelayNet } from './network.js';
 import { HostRoom } from './host.js';
 import { startMenuBg } from './menubg.js';
+import { Signals, RENDER_CONFIG, resolveAll } from './clientconfig.js';
 
 const canvas = document.getElementById('gameCanvas');
 const renderer = new Renderer(canvas);
@@ -40,6 +41,10 @@ let controlsInited = false;
 let world = null;
 let player = null;
 let simDriver = null;        // pure sim kernel ↔ shell bridge (creatures); null when not in a game
+// ---- client render-config (presentation-local; never enters the deterministic sim) ----
+const renderSignals = new Signals();
+let renderCfg = { resolution: 1, raytrace: true, framerate: 60 };
+let cfgAcc = 0, lastRenderAt = 0, sigOverride = null;
 let roomCode = '';           // the room's display name
 let myId = -1;
 let myName = '玩家';          // active character (ui.js owns storage/selection)
@@ -1086,9 +1091,19 @@ function loop(now) {
   rafId = requestAnimationFrame(loop);
 
   let dt = (now - lastTime) / 1000;
+  const rawDtMs = now - lastTime;        // un-clamped frame delta, for the pressure probe
   lastTime = now;
   if (dt < 0) dt = 0;
   if (dt > 0.05) dt = 0.05;
+
+  // client render-config: sample pressure, re-resolve 4×/s, apply resolution (presentation-only).
+  renderSignals.sample(rawDtMs);
+  cfgAcc += rawDtMs;
+  if (cfgAcc >= 250) {
+    cfgAcc = 0;
+    renderCfg = resolveAll(RENDER_CONFIG, { signals: sigOverride || renderSignals.values, scope: 'global' });
+    renderer.setRenderScale(renderCfg.resolution);
+  }
 
   if (touchTick) touchTick(now);
 
@@ -1186,7 +1201,12 @@ function loop(now) {
     }
   }
 
-  renderer.render(eye, player.yaw, player.pitch);
+  // framerate cap (presentation): skip the draw if under the resolved budget (sim still advances).
+  const minFrame = 1000 / (renderCfg.framerate || 60);
+  if (now - lastRenderAt >= minFrame - 2) {
+    lastRenderAt = now;
+    renderer.render(eye, player.yaw, player.pitch);
+  }
 }
 
 // ---- controls & block interaction ----
@@ -1408,6 +1428,9 @@ window.__vc = {
   fly: flyPlayer,                             // 龙形升降:fly(5) 上升 / fly(-3) 下降
   breathe: breatheFire,                       // 喷火(锥形 EffectResolver 伤害 + 火焰投射物)
   hit: computeHit,                            // EffectResolver 试算:hit('wood_shovel','self')
+  // client render-config (presentation-local): inspect resolved knobs + override signals for testing
+  get renderConfig() { return { resolved: renderCfg, signals: sigOverride || renderSignals.values, config: RENDER_CONFIG }; },
+  simSignal(obj) { sigOverride = obj || null; return sigOverride; },   // e.g. simSignal({fps:25,gpu:0.95})
   testArena() { return buildTestArena({ world, simDriver, renderer, player, spawn: (...a) => simDriver.spawn(...a) }); },
   // Local world-save entry: live session snapshot in the vc-worlds format.
   get worldSave() {
