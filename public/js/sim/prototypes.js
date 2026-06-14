@@ -20,8 +20,10 @@ export const PROTOTYPES = [
     behavior: { packs: ['skittish_flee'] }, combat: { atk: 0, def: 0 } },
   // 巨龙:会飞(fly 分面 → 玩家变身后启用飞行,不再受重力)+ 会喷火(fire = 一个
   //   id标签修正数据包,喂同一 EffectResolver:对龙近乎免疫、对火元素回血、对方块减半)。
+  // combat.def REVIVED (was dead scalar): now a defender condition pack — conditions vs the
+  //   ATTACKER's tags (two-sided resolve). 龙鳞:对物理攻击 −30%(对火/魔法不减)。
   { protoId: 4, key: 'dragon',     tags: ['生物.龙', '阶.钻'], tier: 4, hp: 200, name: '巨龙',
-    behavior: { packs: ['fearless'] }, combat: { atk: 12, def: 8 },
+    behavior: { packs: ['fearless'] }, combat: { atk: 12, def: [{ tag: '元素.物理', val: -0.3 }] },
     fly: true,
     fire: { base: 14, mods: [{ tag: '方块', val: -0.5 }, { tag: '生物.龙', val: -0.9 }, { tag: '元素.火', val: -2.0 }] } },
 
@@ -30,7 +32,7 @@ export const PROTOTYPES = [
   { protoId: 5, key: 'rabbit', tags: ['生物.兔', '阶.木'], tier: 0, hp: 5, name: '兔子',
     behavior: { packs: ['jumpy_flee'] }, combat: { atk: 0, def: 0 } },   // fast + very skittish
   { protoId: 6, key: 'golem',  tags: ['生物.石像', '阶.铁'], tier: 2, hp: 40, name: '石像',
-    behavior: { packs: ['fearless'] }, combat: { atk: 6, def: 6 } },      // slow, ignores the player
+    behavior: { packs: ['fearless'] }, combat: { atk: 6, def: [{ tag: '元素.物理', val: -0.5 }] } }, // 石躯:抗物理 −50%
 
   // —— the PLAYER is the SAME substrate (§0.7 万物皆对象): an object whose behavior
   //    facet is replaced by INPUT-CONTROL (the shell drives it; the kernel never ticks

@@ -16,7 +16,7 @@ import { World } from './world.js';
 import { SimDriver } from './sim/sim-driver.js';
 import { perceive, buildTestArena } from './sim/perceive.js';
 import { PROTO_BY_KEY } from './sim/prototypes.js';
-import { effect } from './sim/effect.js';
+import { effect, resolve } from './sim/effect.js';
 import { WEAPONS } from './sim/modifiers.js';
 import { Renderer } from './renderer.js';
 import { Player } from './player.js';
@@ -1319,6 +1319,8 @@ function breatheFire() {
   const fx = -Math.sin(player.yaw), fz = -Math.cos(player.yaw);
   const px = player.pos.x, pz = player.pos.z, py = player.pos.y;
   const R = 8, COS = 0.6;            // range 8 blocks, cone half-angle ~53°
+  const atkTags = proto.tags.concat(player.uidTag ? [player.uidTag] : []);  // the dragon's own tags
+  const atkPack = { mods: fire.mods, use: fire.use, only: fire.only, except: fire.except };
   const hits = [], kills = [];
   for (const e of [...simDriver.state.ents.values()]) {
     const ep = PROTO_BY_KEY.get(e.m.p);
@@ -1327,7 +1329,8 @@ function breatheFire() {
     const d = Math.hypot(dx, dz);
     if (d < 0.001 || d > R) continue;
     if ((dx * fx + dz * fz) / d < COS) continue;   // outside the cone
-    const dmg = effect(fire.base, fire.mods, ep.tags);
+    // two-sided: dragon offense (fire) vs target tags + target defense (combat.def) vs dragon tags
+    const dmg = resolve(fire.base, atkPack, ep.tags, ep.combat && ep.combat.def, atkTags);
     e.hp = Math.round((e.hp - dmg) * 10) / 10;
     if (e.hp <= 0) { simDriver.kill(e.id); kills.push(ep.name); }
     else hits.push(`${ep.name}(-${dmg.toFixed(0)}→hp${e.hp})`);
@@ -1356,22 +1359,27 @@ function walkPlayer(compass, blocks) {
 // Proves the data path: who you ARE (your form's tags) decides what a weapon does to you.
 function computeHit(weaponKey, target) {
   const w = WEAPONS[weaponKey] || WEAPONS.fist;
-  let tags = [], label = '?';
+  let defTags = [], defPack = {}, label = '?';
   if (target == null || target === 'self') {
     const f = player && player.form ? PROTO_BY_KEY.get(player.form) : null;
-    tags = f ? f.tags.concat(player.uidTag ? [player.uidTag] : []) : [];
+    defTags = f ? f.tags.concat(player.uidTag ? [player.uidTag] : []) : [];
+    defPack = (f && f.combat && f.combat.def) || {};
     label = '你(' + (f ? f.name : '?') + ')';
   } else if (typeof target === 'number') {
     const e = simDriver && simDriver.state.ents.get(target);
     const f = e && PROTO_BY_KEY.get(e.m.p);
-    tags = f ? f.tags : []; label = f ? f.name : '#' + target;
+    defTags = f ? f.tags : []; defPack = (f && f.combat && f.combat.def) || {}; label = f ? f.name : '#' + target;
   } else {
     const f = PROTO_BY_KEY.get(target);
-    tags = f ? f.tags : []; label = f ? f.name : String(target);
+    defTags = f ? f.tags : []; defPack = (f && f.combat && f.combat.def) || {}; label = f ? f.name : String(target);
   }
-  const v = effect(w.base, w.mods, tags);
+  // attacker tags = your form tags (+uid) + the weapon's own damage-type tags (drive defender armour)
+  const af = player && player.form ? PROTO_BY_KEY.get(player.form) : null;
+  const atkTags = (af ? af.tags : []).concat(player && player.uidTag ? [player.uidTag] : []).concat(w.tags || []);
+  const atkPack = { mods: w.mods, use: w.use, only: w.only, except: w.except };
+  const v = resolve(w.base, atkPack, defTags, defPack, atkTags);
   const kind = v > 0 ? `伤害 ${v.toFixed(1)}` : (v < 0 ? `回血 ${(-v).toFixed(1)} (被按摩)` : '免疫 0');
-  return `${w.name}→${label}[${tags.join(',')}]: ${kind}`;
+  return `${w.name}→${label}[${defTags.join(',')}]: ${kind}`;
 }
 
 window.__vc = {

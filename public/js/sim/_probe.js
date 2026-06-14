@@ -16,7 +16,7 @@
 //   node public/js/sim/_probe.js
 
 import { makeState, makeEntity, reduce } from './kernel.js';
-import { effect, affinity } from './effect.js';
+import { effect, affinity, resolve } from './effect.js';
 import { PROTO_BY_KEY, protoByKey } from './prototypes.js';
 import { PACK_BY_KEY } from './actionpacks.js';
 import { WEAPONS } from './modifiers.js';
@@ -301,6 +301,42 @@ function run2(protoKey, packKey, spawn, near, far, t1, t2) {
 probe('effect', '⚠combat.def 死数据:原型写了防御但无人读', 'LOGIC✗', 0, 0,
   'prototypes.combat.def 存在(龙def8)但 effect/kernel 从不读取→防御未接线(同"目标侧护甲包"缺口)');
 
+// ================= ROUND 3: S1 EffectResolver v2 — two-sided + set algebra + 可召唤文档 (LIVE engine) =================
+// These hit the REAL effect.js resolve(); they show audit gaps the data language now closes.
+{
+  // #5 通用护甲 was LOGIC✗ (one-sided effect had no defender param). combat.def is now a WIRED
+  // defender pack: a physical hit on the golem is halved by 石躯抗物理, with ZERO weapon authoring.
+  const golem = protoByKey('golem');
+  const physHit = resolve(10, {}, golem.tags, golem.combat.def, ['元素.物理']);  // 10×(1-0.5)=5
+  const fireHit = resolve(14, {}, golem.tags, golem.combat.def, ['元素.火']);     // armour ≠ fire → 14
+  probe('effect', '✅通用护甲(原#5 LOGIC✗→DATA✓):石像抗物理', physHit === 5 && fireHit === 14 ? 'DATA✓' : 'LOGIC✗',
+    ham(golem.combat.def), 1, `物理打=${physHit}(石躯-50%) 火打=${fireHit}(护甲不挡火)·零改武器`);
+}
+{
+  // complement gate — the assassin the audit measured at Hamming 113(+leak) → 18, leak-free.
+  const dagger = { only: ['玩家.zz'] };
+  const zz = resolve(10, dagger, ['生物.人', '玩家.zz'], {}, []);
+  const dragon = resolve(10, dagger, ['生物.龙'], {}, []);
+  const mech = resolve(10, dagger, ['机械.傀儡'], {}, []);     // a NEW root — still 0, structurally no leak
+  probe('effect', '✅补集 only(原#4 113→18字符·消漏)', zz === 10 && dragon === 0 && mech === 0 ? 'DATA✓' : 'LOGIC✗',
+    ham(dagger), 1, `zz=${zz} 龙=${dragon} 新根机械=${mech}(结构性不漏)`);
+}
+{
+  // premise gate (when) — context-conditional bias active only when the actor's tags hold.
+  const wand = { mods: [{ when: ['生物.龙'], tag: '阶.木', val: 1 }] };
+  const asDragon = resolve(10, wand, ['阶.木'], {}, ['生物.龙']);
+  const asHuman = resolve(10, wand, ['阶.木'], {}, ['生物.人']);
+  probe('effect', '✅前提 when:持杖者是龙才+100%', asDragon === 20 && asHuman === 10 ? 'DATA✓' : 'LOGIC✗',
+    ham({ when: ['生物.龙'] }), 1, `龙持=${asDragon} 人持=${asHuman}`);
+}
+{
+  // callable kit — iron_sword cites @铁级 instead of inlining its 减伤表 (live WEAPONS).
+  const vGold = effect(WEAPONS.iron_sword.base, WEAPONS.iron_sword, ['阶.金']);   // 18×(1-0.5)=9
+  const vDia = effect(WEAPONS.iron_sword.base, WEAPONS.iron_sword, ['阶.钻']);    // 18×(1-0.8)=3.6
+  probe('facet', '✅可召唤文档:铁剑 use:[@铁级]', vGold === 9 && Math.abs(vDia - 3.6) < 1e-9 ? 'DATA✓' : 'LOGIC✗',
+    ham({ use: ['@铁级'] }), 1, `铁剑对金=${vGold} 对钻=${vDia}(召唤@铁级,无内联表)`);
+}
+
 // ---- GLOBAL orthogonality assertion: after registering ~18 wild objects, is the baseline
 //      fowl trajectory + reference effects BYTE-IDENTICAL? (no collateral) ----
 const traceSame = fowlTrace() === BASE_TRACE;
@@ -326,7 +362,7 @@ console.log(`全局正交性: 注册${regCount}个野对象后, 基线小鸡轨�
 console.log('  → 加数据从不扰动既有对象(per-object 派发 + additive affinity + 按 id 定序 = 结构性正交)');
 console.log('\n缺口分类:');
 console.log('  ⛔缺原语(PRIM): patrol/chase(桩)/blink/垂直运动/spawn复制/prim组合  —— 内核运动是平面x/z, 原语集小且不可组合');
-console.log('  ⛔缺解析器(LOGIC): 目标侧护甲包 / 延时效果 / on-death输出 / AoE持续  —— 解析器只有 effect+launch+ttl');
+console.log('  ⛔缺解析器(LOGIC): 延时效果 / on-death输出 / AoE持续  —— [目标侧护甲包 已由 S1 v2 接通✅]');
 console.log('  🟡数据但脆(TAXO/render): 全域免疫需逐根抑制(无全域根标签) / 尺寸仅渲染量');
 console.log('\n结论: 已实现轴(标签/affinity/effect·包调参·present变体·变身·ttl·fly)上, 数据正交性与优雅性强(汉明1~4字段, 1~2步, 零连带);');
 console.log('      穷尽性受限于"已实现的小原语/解析器集"——多个缺口正是设计已许诺、内核尚未补的能力(chase/复制/on-death/目标侧修正/AoE)。');
