@@ -170,7 +170,7 @@ export class Renderer {
 
   // skin v2 {b,t,p,k}; legacy {s,p} payloads are migrated, anything else
   // collapses to the default skin (shared rule, see cleanSkin).
-  addPlayer(id, name, skin) {
+  addPlayer(id, name, skin, scale = 1) {
     if (this.players.has(id)) this.removePlayer(id);
     const { b, t, p, k } = cleanSkin(skin);
     const { w, h, fem } = BODIES[b];
@@ -202,6 +202,11 @@ export class Renderer {
     const sprite = makeNameSprite(name);
     sprite.position.y = 1.7 * h + 0.35;
     group.add(sprite);
+
+    if (scale !== 1) {
+      group.scale.setScalar(scale);                  // per-creature size (present facet)
+      sprite.scale.set(1.6 / scale, 0.4 / scale, 1); // counter-scale so the name stays legible
+    }
 
     group.position.set(8, 40, 8); // server default until first pmove
     this.scene.add(group);

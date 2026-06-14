@@ -17,22 +17,25 @@ export const PROTOTYPES = [
 
   // —— behavior/combat filled ⇒ "creature" (derived). Same shape, no new type. ——
   { protoId: 3, key: 'fowl_small', tags: ['生物.禽', '阶.木'], tier: 0, hp: 8, name: '小鸡',
-    behavior: { packs: ['skittish_flee'] }, combat: { atk: 0, def: 0 } },
+    behavior: { packs: ['skittish_flee'] }, combat: { atk: 0, def: 0 },
+    skin: { b: 0, t: 2, p: 1, k: 1 }, scale: 0.6 },          // present facet: 小·黄
   // 巨龙:会飞(fly 分面 → 玩家变身后启用飞行,不再受重力)+ 会喷火(fire = 一个
   //   id标签修正数据包,喂同一 EffectResolver:对龙近乎免疫、对火元素回血、对方块减半)。
   // combat.def REVIVED (was dead scalar): now a defender condition pack — conditions vs the
   //   ATTACKER's tags (two-sided resolve). 龙鳞:对物理攻击 −30%(对火/魔法不减)。
   { protoId: 4, key: 'dragon',     tags: ['生物.龙', '阶.钻'], tier: 4, hp: 200, name: '巨龙',
     behavior: { packs: ['fearless'] }, combat: { atk: 12, def: [{ tag: '元素.物理', val: -0.3 }] },
-    fly: true,
+    fly: true, skin: { b: 3, t: 3, p: 3, k: 5 }, scale: 2.4,   // present facet: 巨·绿
     fire: { base: 14, mods: [{ tag: '方块', val: -0.5 }, { tag: '生物.龙', val: -0.9 }, { tag: '元素.火', val: -2.0 }] } },
 
   // —— NEW creatures added as PURE DATA (generality test: distinct behaviour from data,
   //    zero kernel change). They reference packs by code too. ——
   { protoId: 5, key: 'rabbit', tags: ['生物.兔', '阶.木'], tier: 0, hp: 5, name: '兔子',
-    behavior: { packs: ['jumpy_flee'] }, combat: { atk: 0, def: 0 } },   // fast + very skittish
+    behavior: { packs: ['jumpy_flee'] }, combat: { atk: 0, def: 0 },
+    skin: { b: 0, t: 7, p: 7, k: 0 }, scale: 0.5 },          // present facet: 小·白
   { protoId: 6, key: 'golem',  tags: ['生物.石像', '阶.铁'], tier: 2, hp: 40, name: '石像',
-    behavior: { packs: ['fearless'] }, combat: { atk: 6, def: [{ tag: '元素.物理', val: -0.5 }] } }, // 石躯:抗物理 −50%
+    behavior: { packs: ['fearless'] }, combat: { atk: 6, def: [{ tag: '元素.物理', val: -0.5 }] }, // 石躯:抗物理 −50%
+    skin: { b: 3, t: 7, p: 5, k: 3 }, scale: 1.4 },          // present facet: 壮·石灰
 
   // —— the PLAYER is the SAME substrate (§0.7 万物皆对象): an object whose behavior
   //    facet is replaced by INPUT-CONTROL (the shell drives it; the kernel never ticks

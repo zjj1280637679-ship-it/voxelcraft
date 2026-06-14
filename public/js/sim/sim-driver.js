@@ -29,7 +29,8 @@ export class SimDriver {
     let y = 40;
     try { y = this.world.surfaceHeight(Math.floor(x), Math.floor(z)); } catch (_) { /* unloaded */ }
     this.state.ents.set(id, makeEntity(id, protoKey, packKey, x, y, z, seed));
-    this.renderer.addPlayer('e' + id, name || protoByKey(protoKey).name || protoKey, ENT_SKIN);
+    const proto = protoByKey(protoKey);   // present facet: per-creature skin + size (data, swappable)
+    this.renderer.addPlayer('e' + id, name || proto.name || protoKey, proto.skin || ENT_SKIN, proto.scale || 1);
     this._ids.add(id);
     return id;
   }
@@ -41,7 +42,8 @@ export class SimDriver {
     const e = makeEntity(id, protoKey, packKey, x, y, z, seed);
     e.dir = dirIndex & 7;
     this.state.ents.set(id, e);
-    this.renderer.addPlayer('e' + id, '', FIRE_SKIN);
+    const proto = protoByKey(protoKey);
+    this.renderer.addPlayer('e' + id, '', proto.skin || FIRE_SKIN, proto.scale || 0.35);
     this._ids.add(id);
     return id;
   }
