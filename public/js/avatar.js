@@ -1,31 +1,45 @@
-// THE unified avatar model spec — ONE definition of "what a character looks like" given skin
-// {b,t,p,k}. Pure DATA (no three.js): a flat list of boxes in WORLD coords (feet at y=0, facing −z,
-// units where ~1.8 = a body). Both backends consume it, so they can never drift apart:
-//   · renderer.js builds Three.js boxes from it      (3D, in-game + other players + creatures)
-//   · ui.js projects it to a 2D canvas               (menu 人物展示 / 人物设计 preview)
-// = the unified 造物台. Change the model HERE and every view updates. (present-facet "model" as data)
+// THE unified avatar model — backend #1: PURE VOXEL. A model is a fine voxel grid, authored as a
+// list of filled box REGIONS (so ~25 lines describe a detailed character instead of 1000 voxels).
+// Pure DATA (no three.js), so every view shares ONE source of truth (= 统一造物台):
+//   · renderer.js rasterizes the boxes → ONE culled, vertex-coloured mesh   (3D, in-game)
+//   · ui.js projects the boxes to a 2D canvas                                (menu preview)
+//
+// Coords: integer voxels, feet at y=0, x centred on 0, −z = FRONT (face). Later boxes overwrite
+// earlier ones (layering), so face details (eyes) overwrite the head's front skin.
 
-import { BODIES, PALETTE, SKIN_TONES } from './constants.js';
+import { PALETTE, SKIN_TONES } from './constants.js';
 
-export function avatarParts(sk) {
-  const body = BODIES[sk.b] || BODIES[1];
-  const w = body.w, h = body.h, tw = body.fem ? w * 0.92 : w;
-  const skinCol = SKIN_TONES[sk.k], topCol = PALETTE[sk.t], pantCol = PALETTE[sk.p];
-  const legH = 0.72 * h, torsoH = 0.60 * h, headS = 0.52 * w, headH = 0.50 * h;
-  const torsoW = 0.50 * tw, torsoD = 0.28 * tw, torsoY = legH + torsoH / 2;
-  const armW = 0.17 * w, armH = 0.58 * h, armX = torsoW / 2 + armW / 2;
-  const shoulderY = legH + torsoH - armH / 2, headY = legH + torsoH + headH / 2;
-  // `parent:'head'` parts are head-attached in 3D (so they tilt with a pitch look); their x/y/z here
-  // are still WORLD coords — the 3D backend subtracts the head's position, the 2D backend uses as-is.
-  return [
-    { id: 'legL',  sx: 0.24 * w,        sy: legH,     sz: 0.26 * w,        x: -0.13 * w, y: legH / 2,          z: 0,                  color: pantCol },
-    { id: 'legR',  sx: 0.24 * w,        sy: legH,     sz: 0.26 * w,        x:  0.13 * w, y: legH / 2,          z: 0,                  color: pantCol },
-    { id: 'torso', sx: torsoW,          sy: torsoH,   sz: torsoD,          x: 0,         y: torsoY,            z: 0,                  color: topCol },
-    { id: 'armL',  sx: armW,            sy: armH,     sz: 0.22 * w,        x: -armX,     y: shoulderY,         z: 0,                  color: topCol },
-    { id: 'armR',  sx: armW,            sy: armH,     sz: 0.22 * w,        x:  armX,     y: shoulderY,         z: 0,                  color: topCol },
-    { id: 'head',  sx: headS,           sy: headH,    sz: headS,           x: 0,         y: headY,             z: 0,                  color: skinCol },
-    { id: 'hair',  sx: headS + 0.02 * w, sy: 0.16 * h, sz: headS + 0.02 * w, x: 0,       y: headY + headH / 2 - 0.05 * h, z: 0,       color: '#4a3526', parent: 'head' },
-    { id: 'eyeL',  sx: 0.1 * w,         sy: 0.1 * h,  sz: 0.04 * w,        x: -0.12 * w, y: headY + 0.03 * h,  z: -headS / 2 - 0.001, color: '#20242b', parent: 'head' },
-    { id: 'eyeR',  sx: 0.1 * w,         sy: 0.1 * h,  sz: 0.04 * w,        x:  0.12 * w, y: headY + 0.03 * h,  z: -headS / 2 - 0.001, color: '#20242b', parent: 'head' },
+// fixed accent palette (not in the 4-slot skin yet — the detail this backend unlocks)
+const HAIR = '#3a2a1b', BOOT = '#2b2420', BELT = '#3a2a18', CLOAK = '#3f6e4a', EYE = '#15171c', MOUTH = '#6a463c';
+
+export const AVATAR_VOX_H = 30; // model height in voxels (the grid resolution / detail ceiling knob)
+
+export function avatarModel(sk) {
+  const skin = SKIN_TONES[sk.k], top = PALETTE[sk.t], pant = PALETTE[sk.p];
+  const B = (x0, x1, y0, y1, z0, z1, color) => ({ x0, x1, y0, y1, z0, z1, color });
+  const boxes = [
+    // ── legs + boots + hip ──
+    B(-5, -1, 0, 12, -2, 2, pant), B(1, 5, 0, 12, -2, 2, pant),
+    B(-5, -1, 0, 2, -3, 2, BOOT), B(1, 5, 0, 2, -3, 2, BOOT),
+    B(-5, 5, 12, 13, -2, 2, pant),
+    // ── torso + belt + collar/cloak ──
+    B(-6, 6, 14, 22, -3, 3, top),
+    B(-6, 6, 13, 14, -3, 3, BELT),
+    B(-5, 5, 21, 22, -4, 3, CLOAK),
+    // ── arms (sleeves) + hands ──
+    B(-8, -7, 14, 22, -2, 2, top), B(7, 8, 14, 22, -2, 2, top),
+    B(-8, -7, 13, 14, -2, 2, skin), B(7, 8, 13, 14, -2, 2, skin),
+    // ── head ──
+    B(-4, 4, 22, 28, -3, 3, skin),
+    // ── hair (top / back / sides / front fringe) ──
+    B(-5, 5, 27, 29, -4, 3, HAIR),
+    B(-5, 5, 22, 28, 2, 3, HAIR),
+    B(-5, -4, 23, 28, -3, 2, HAIR), B(4, 5, 23, 28, -3, 2, HAIR),
+    B(-4, 4, 26, 27, -4, -3, HAIR),
+    // ── face (overwrites the head's front skin at z=−3, nose protrudes to z=−4) ──
+    B(-3, -2, 24, 25, -3, -3, EYE), B(2, 3, 24, 25, -3, -3, EYE),
+    B(0, 0, 23, 24, -4, -4, skin),
+    B(-1, 1, 22, 23, -3, -3, MOUTH),
   ];
+  return { h: AVATAR_VOX_H, boxes };
 }

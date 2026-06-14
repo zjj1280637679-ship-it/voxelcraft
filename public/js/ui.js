@@ -6,7 +6,7 @@
 // rendered exclusively via textContent, never innerHTML.
 
 import { PALETTE, SKIN_TONES, BODIES } from './constants.js';
-import { avatarParts } from './avatar.js';
+import { avatarModel } from './avatar.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -153,30 +153,26 @@ export function ensureCharacter() {
 
 // ---------- avatar preview (skin v2, renderer.addPlayer proportions) ----------
 
-// Front view of the avatar — a 2D projection of the UNIFIED avatarParts spec (the SAME model the
-// in-game 3D renderer builds). Feet share one floor line so tall/short bodies compare; the face
-// (eyes at −z) is drawn last so it lands on top. Change the model in avatar.js → both views update.
+// Front view of the avatar — a 2D projection of the SAME unified avatarModel voxel boxes the in-game
+// 3D renderer rasterizes. Front face is −z, so we draw back-to-front (larger z0 first) and the face
+// (eyes at z=−3, nose at −4) lands on top. Change the model in avatar.js → both views update.
 function drawAvatar(canvas, skin) {
   const ctx = canvas.getContext('2d');
   const w = canvas.width;
   const h = canvas.height;
   ctx.clearRect(0, 0, w, h);
-  const parts = avatarParts(cleanSkin(skin));
-  let maxX = 0.5, topY = 0;
-  for (const q of parts) { maxX = Math.max(maxX, Math.abs(q.x) + q.sx / 2); topY = Math.max(topY, q.y + q.sy / 2); }
+  const boxes = avatarModel(cleanSkin(skin)).boxes;
+  let maxX = 1, topY = 1;
+  for (const b of boxes) { maxX = Math.max(maxX, Math.abs(b.x0), Math.abs(b.x1 + 1)); topY = Math.max(topY, b.y1 + 1); }
   const u = Math.min((h * 0.92) / topY, (w * 0.86) / (maxX * 2));
   const cx = w / 2, floorY = (h + topY * u) / 2;
-  // back-to-front (larger z first) so the forward face lands on top
-  for (const q of parts.slice().sort((a, b) => b.z - a.z)) {
-    const x = cx + (q.x - q.sx / 2) * u;
-    const y = floorY - (q.y + q.sy / 2) * u;
-    const bw = Math.max(1, Math.round(q.sx * u)), bh = Math.max(1, Math.round(q.sy * u));
-    ctx.fillStyle = q.color;
+  for (const b of boxes.slice().sort((a, c) => c.z0 - a.z0)) {   // far (back, +z) first → face on top
+    const x = cx + b.x0 * u;
+    const y = floorY - (b.y1 + 1) * u;
+    const bw = Math.max(1, Math.round((b.x1 + 1 - b.x0) * u));
+    const bh = Math.max(1, Math.round((b.y1 + 1 - b.y0) * u));
+    ctx.fillStyle = b.color;
     ctx.fillRect(Math.round(x), Math.round(y), bw, bh);
-    if (bw > 6) { // blocky 3D hint: darker right edge on the larger boxes
-      ctx.fillStyle = 'rgba(0,0,0,0.16)';
-      ctx.fillRect(Math.round(x + bw * 0.72), Math.round(y), Math.round(bw * 0.28), bh);
-    }
   }
 }
 

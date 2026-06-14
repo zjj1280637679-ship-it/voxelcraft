@@ -2,7 +2,7 @@
 // chunks; geometries are disposed whenever a chunk mesh is rebuilt or removed.
 import * as THREE from '../lib/three.module.js';
 import { CHUNK, PALETTE, SKIN_TONES, BODIES, chunkKey } from './constants.js';
-import { avatarParts } from './avatar.js';
+import { avatarModel, AVATAR_VOX_H } from './avatar.js';
 import { buildAtlas } from './textures.js';
 import { buildChunkGeometry } from './mesher.js';
 
@@ -75,6 +75,57 @@ function makeNameSprite(name) {
   sprite.scale.set(1.6, 0.4, 1);
   sprite.renderOrder = 10; // draw over terrain so names stay readable
   return sprite;
+}
+
+const VOX = 0.06; // world units per avatar voxel (≈ 1.8 tall for a 30-voxel model)
+
+// 6 cube faces: outward normal + 4 corner offsets (CCW from outside → front-facing). tris (0,1,2)+(0,2,3).
+const VOX_FACES = [
+  { n: [1, 0, 0], v: [[1, 0, 0], [1, 1, 0], [1, 1, 1], [1, 0, 1]] },
+  { n: [-1, 0, 0], v: [[0, 0, 1], [0, 1, 1], [0, 1, 0], [0, 0, 0]] },
+  { n: [0, 1, 0], v: [[0, 1, 1], [1, 1, 1], [1, 1, 0], [0, 1, 0]] },
+  { n: [0, -1, 0], v: [[0, 0, 0], [1, 0, 0], [1, 0, 1], [0, 0, 1]] },
+  { n: [0, 0, 1], v: [[1, 0, 1], [1, 1, 1], [0, 1, 1], [0, 0, 1]] },
+  { n: [0, 0, -1], v: [[0, 0, 0], [0, 1, 0], [1, 1, 0], [1, 0, 0]] },
+];
+
+// PURE-VOXEL backend: rasterize box regions → a voxel grid, then emit ONE culled, vertex-coloured
+// BufferGeometry (only faces exposed to air). Centred on x/z, feet at y=0; positions baked in world
+// units (×VOX). One geometry + one material per avatar — scales to thousands of voxels in one draw.
+function buildVoxelGeometry(boxes) {
+  const vox = new Map();
+  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+  for (const b of boxes) {
+    for (let x = b.x0; x <= b.x1; x++) for (let y = b.y0; y <= b.y1; y++) for (let z = b.z0; z <= b.z1; z++) {
+      vox.set(x + ',' + y + ',' + z, b.color);
+      if (x < minX) minX = x; if (x > maxX) maxX = x;
+      if (z < minZ) minZ = z; if (z > maxZ) maxZ = z;
+    }
+  }
+  const cx = (minX + maxX + 1) / 2, cz = (minZ + maxZ + 1) / 2;
+  const has = (x, y, z) => vox.has(x + ',' + y + ',' + z);
+  const P = [], N = [], C = [], col = new THREE.Color();
+  const order = [0, 1, 2, 0, 2, 3];
+  for (const [key, color] of vox) {
+    const p = key.split(','), x = +p[0], y = +p[1], z = +p[2];
+    col.set(color);
+    for (let f = 0; f < 6; f++) {
+      const n = VOX_FACES[f].n;
+      if (has(x + n[0], y + n[1], z + n[2])) continue; // cull interior face
+      const v = VOX_FACES[f].v;
+      for (let i = 0; i < 6; i++) {
+        const o = v[order[i]];
+        P.push((x + o[0] - cx) * VOX, (y + o[1]) * VOX, (z + o[2] - cz) * VOX);
+        N.push(n[0], n[1], n[2]);
+        C.push(col.r, col.g, col.b);
+      }
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(C, 3));
+  return g;
 }
 
 export class Renderer {
@@ -189,33 +240,17 @@ export class Renderer {
   // collapses to the default skin (shared rule, see cleanSkin).
   addPlayer(id, name, skin, scale = 1) {
     if (this.players.has(id)) this.removePlayer(id);
-    const parts = avatarParts(cleanSkin(skin));   // the UNIFIED avatar spec (shared with the menu 2D preview)
+    const model = avatarModel(cleanSkin(skin));    // UNIFIED voxel model (shared with the menu 2D preview)
 
     const group = new THREE.Group();
-    const geos = [], mats = [];
-    // 3D backend: turn each spec box into a Three.js mesh. `parent:'head'` parts attach to the head
-    // (head-local = world − head pos) so they tilt with a pitch look; the rest sit on the group.
-    let head = null, topY = 0;
-    const headSpec = parts.find((q) => q.id === 'head');
-    for (const q of parts) {
-      const g = new THREE.BoxGeometry(q.sx, q.sy, q.sz);
-      const m = new THREE.MeshLambertMaterial({ color: new THREE.Color(q.color) });
-      const mesh = new THREE.Mesh(g, m);
-      mesh.castShadow = true; mesh.receiveShadow = true;
-      geos.push(g); mats.push(m);
-      if (q.parent === 'head' && head) {
-        mesh.position.set(q.x - headSpec.x, q.y - headSpec.y, q.z - headSpec.z);
-        head.add(mesh);
-      } else {
-        mesh.position.set(q.x, q.y, q.z);
-        group.add(mesh);
-        if (q.id === 'head') head = mesh;
-      }
-      topY = Math.max(topY, q.y + q.sy / 2);
-    }
+    const geometry = buildVoxelGeometry(model.boxes); // one culled, vertex-coloured mesh
+    const mat = new THREE.MeshLambertMaterial({ vertexColors: true });
+    const mesh = new THREE.Mesh(geometry, mat);
+    mesh.castShadow = true; mesh.receiveShadow = true;
+    group.add(mesh);
 
     const sprite = makeNameSprite(name);
-    sprite.position.y = topY + 0.32;
+    sprite.position.y = model.h * VOX + 0.3;
     group.add(sprite);
 
     if (scale !== 1) {
@@ -226,16 +261,17 @@ export class Renderer {
     group.position.set(8, 40, 8); // server default until first pmove
     this.scene.add(group);
 
+    // head:null — a single merged mesh can't tilt just the head (a rig would; deferred). Guarded below.
     this.players.set(id, {
       group,
-      head,
+      head: null,
       sprite,
       targetPos: group.position.clone(),
       targetRy: 0,
       targetRx: 0,
       initialized: false,
-      geos,
-      mats,
+      geos: [geometry],
+      mats: [mat],
     });
   }
 
@@ -253,7 +289,7 @@ export class Renderer {
       pl.initialized = true;
       pl.group.position.copy(pl.targetPos);
       pl.group.rotation.y = pl.targetRy;
-      pl.head.rotation.x = pl.targetRx;
+      if (pl.head) pl.head.rotation.x = pl.targetRx;
     }
   }
 
@@ -277,12 +313,12 @@ export class Renderer {
     for (const pl of this.players.values()) {
       pl.group.position.lerp(pl.targetPos, k);
       pl.group.rotation.y += angleDelta(pl.group.rotation.y, pl.targetRy) * k;
-      pl.head.rotation.x += (pl.targetRx - pl.head.rotation.x) * k;
+      if (pl.head) pl.head.rotation.x += (pl.targetRx - pl.head.rotation.x) * k;
     }
 
     // keep the orthographic shadow box centred on the player so shadows cover the visible area
     if (this.renderer.shadowMap.enabled) {
-      this.sun.position.set(eyePos.x + 55, eyePos.y + 58, eyePos.z + 30); // raking angle → long, readable shadows
+      this.sun.position.set(eyePos.x + 40, eyePos.y + 60, eyePos.z - 38); // from the front-ish so faces light up
       this.sun.target.position.set(eyePos.x, eyePos.y, eyePos.z);
       this.sun.target.updateMatrixWorld();
     }
@@ -300,7 +336,7 @@ export class Renderer {
     if (this.renderer.shadowMap.enabled !== on) {
       this.renderer.shadowMap.enabled = on;
       this.sun.castShadow = on;
-      this.hemi.intensity = on ? 0.5 : 0.9;   // dim the sky fill so shadows actually read
+      this.hemi.intensity = on ? 0.62 : 0.9;  // dim the sky fill so shadows read (but faces stay legible)
       this.sun.intensity = on ? 1.7 : 1.3;
       this.material.needsUpdate = true;
       for (const pl of this.players.values()) for (const m of pl.mats) m.needsUpdate = true;
