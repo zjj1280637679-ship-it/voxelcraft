@@ -79,10 +79,13 @@ export const RENDER_CONFIG = {
   framerate: [
     { when: [{ sig: 'gpu', op: '>', val: 0.85 }], value: 30, ceil: true },  // 高压→限 30
   ],
+  shadow: [
+    { when: [{ sig: 'fps', op: '<', val: 40 }], value: 1024, ceil: true },  // 掉帧→阴影图降到 1024
+  ],
 };
 
 // The player's chosen ceilings (= the ALLOWED MAX per knob). Defaults; the UI overrides + persists.
-export const DEFAULT_PREFS = { resolution: 1.0, raytrace: true, framerate: 60 };
+export const DEFAULT_PREFS = { resolution: 1.0, raytrace: true, framerate: 60, shadow: 2048 };
 
 // Resolve every knob with the PLAYER's pref as the base/ceiling: run at the player's max when the
 // compute unit sustains it, let the adaptive ceils clamp DOWN under pressure, never exceed the max.

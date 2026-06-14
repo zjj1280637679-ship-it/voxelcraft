@@ -44,8 +44,10 @@ const a = resolveSetting(R, sig({ fps: 25 })), b = resolveSetting(R, sig({ fps: 
 eq('同输入两次一致', a, b);
 
 console.log('\n⑥ 玩家上限语义 resolveWithPrefs(设定=允许上限,自适应只降不升)');
-eq('默认空闲', resolveWithPrefs(DEFAULT_PREFS, sig({ fps: 60, gpu: 0.1 })), { resolution: 1.0, raytrace: true, framerate: 60 });
-eq('默认高压→全钳', resolveWithPrefs(DEFAULT_PREFS, sig({ fps: 25, gpu: 0.95 })), { resolution: 0.5, raytrace: false, framerate: 30 });
+eq('默认空闲', resolveWithPrefs(DEFAULT_PREFS, sig({ fps: 60, gpu: 0.1 })), { resolution: 1.0, raytrace: true, framerate: 60, shadow: 2048 });
+eq('默认高压→全钳(含阴影降1024)', resolveWithPrefs(DEFAULT_PREFS, sig({ fps: 25, gpu: 0.95 })), { resolution: 0.5, raytrace: false, framerate: 30, shadow: 1024 });
+eq('玩家设阴影4096空闲→4096', resolveWithPrefs({ resolution: 1, raytrace: true, framerate: 60, shadow: 4096 }, sig({ fps: 60 })).shadow, 4096);
+eq('玩家设阴影4096高压→钳1024', resolveWithPrefs({ resolution: 1, raytrace: true, framerate: 60, shadow: 4096 }, sig({ fps: 25 })).shadow, 1024);
 eq('玩家设上限2.0空闲→2.0', resolveWithPrefs({ resolution: 2.0, raytrace: true, framerate: 120 }, sig({ fps: 60, gpu: 0.1 })).resolution, 2.0);
 eq('玩家设2.0但高压→钳0.5', resolveWithPrefs({ resolution: 2.0, raytrace: true, framerate: 120 }, sig({ fps: 25 })).resolution, 0.5);
 eq('玩家设上限0.5→永不超(空闲也0.5)', resolveWithPrefs({ resolution: 0.5, raytrace: false, framerate: 30 }, sig({ fps: 60 })).resolution, 0.5);

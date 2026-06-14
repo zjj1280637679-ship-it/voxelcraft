@@ -56,6 +56,7 @@ function savePrefs() { try { localStorage.setItem('vc-render-prefs', JSON.string
 function applyRenderConfig() {
   renderCfg = resolveWithPrefs(userPrefs, { signals: sigOverride || renderSignals.values });
   renderer.setRenderScale(renderCfg.resolution);
+  renderer.setQuality(renderCfg.raytrace, renderCfg.shadow);   // 光追=动态阴影,shadow=阴影图尺寸
 }
 let roomCode = '';           // the room's display name
 let myId = -1;
@@ -1414,9 +1415,10 @@ function computeHit(weaponKey, target) {
 const SEG = {
   resolution: [['省电', 0.5], ['标准', 1], ['高', 1.5], ['极致', 2]],
   raytrace: [['关', false], ['开', true]],
+  shadow: [['低', 1024], ['中', 2048], ['高', 4096]],
   framerate: [['30', 30], ['60', 60], ['120', 120]],
 };
-const SEG_EL = { resolution: 'segResolution', raytrace: 'segRaytrace', framerate: 'segFramerate' };
+const SEG_EL = { resolution: 'segResolution', raytrace: 'segRaytrace', shadow: 'segShadow', framerate: 'segFramerate' };
 let settingsInited = false;
 let settingsTimer = null;
 
@@ -1431,10 +1433,11 @@ function refreshActual() {
   const el = document.getElementById('settingsActual');
   if (!el) return;
   const r = renderCfg, fps = (sigOverride || renderSignals.values).fps;
-  const res = `分辨率 ≤${userPrefs.resolution}×${r.resolution !== userPrefs.resolution ? ' → 当前 ' + r.resolution + '×(自适应)' : ''}`;
-  const rt = `光追 ${userPrefs.raytrace ? '开' : '关'}${r.raytrace !== userPrefs.raytrace ? ' → 当前 ' + (r.raytrace ? '开' : '关') : ''}`;
-  const fr = `帧率 ≤${userPrefs.framerate}${r.framerate !== userPrefs.framerate ? ' → 当前 ' + r.framerate : ''}`;
-  el.textContent = `${res}　${rt}　${fr}　(实时 ${fps}fps)`;
+  const res = `分辨率 ≤${userPrefs.resolution}×${r.resolution !== userPrefs.resolution ? '→' + r.resolution + '×' : ''}`;
+  const rt = `光追 ${userPrefs.raytrace ? '开' : '关'}${r.raytrace !== userPrefs.raytrace ? '→' + (r.raytrace ? '开' : '关') : ''}`;
+  const sh = userPrefs.raytrace ? ` 阴影 ${userPrefs.shadow}${r.shadow !== userPrefs.shadow ? '→' + r.shadow : ''}` : '';
+  const fr = `帧率 ≤${userPrefs.framerate}${r.framerate !== userPrefs.framerate ? '→' + r.framerate : ''}`;
+  el.textContent = `${res}　${rt}${sh}　${fr}　(实时 ${fps}fps · 当前=自适应)`;
 }
 function openSettings() {
   try { if (document.exitPointerLock) document.exitPointerLock(); } catch (_) {}
